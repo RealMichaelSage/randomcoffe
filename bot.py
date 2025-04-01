@@ -1195,7 +1195,8 @@ def main():
             ENTER_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_language)],
             ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
         },
-        fallbacks=[CommandHandler('cancel', start)]
+        fallbacks=[CommandHandler('cancel', start)],
+        per_message=True
     )
 
     # Создаем обработчик разговора для настроек
@@ -1209,7 +1210,8 @@ def main():
             SETTINGS_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_interests_preference)],
             SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
         },
-        fallbacks=[CommandHandler('cancel', start)]
+        fallbacks=[CommandHandler('cancel', start)],
+        per_message=True
     )
 
     # Добавляем обработчики
@@ -1221,11 +1223,11 @@ def main():
     application.add_handler(conv_handler)
     application.add_handler(settings_handler)
 
-    # Добавляем обработчик добавления бота в чат
+    # Добавляем обработчики для отслеживания изменений в чате
     application.add_handler(MessageHandler(
-        filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
+        filters.ChatMemberUpdated.MY_CHAT_MEMBER, handle_new_chat_member))
     application.add_handler(MessageHandler(
-        filters.StatusUpdate.LEFT_CHAT_MEMBERS, handle_left_chat_member))
+        filters.ChatMemberUpdated.MY_CHAT_MEMBER, handle_left_chat_member))
 
     # Добавляем обработчик ответов на опросы
     application.add_handler(PollAnswerHandler(handle_poll_answer))
