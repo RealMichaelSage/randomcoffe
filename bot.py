@@ -1197,7 +1197,8 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', start)],
         per_chat=True,
-        per_user=True
+        per_user=True,
+        per_message=True
     )
 
     # Создаем обработчик разговора для настроек
@@ -1213,7 +1214,8 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', start)],
         per_chat=True,
-        per_user=True
+        per_user=True,
+        per_message=True
     )
 
     # Добавляем обработчики
@@ -1226,10 +1228,10 @@ def main():
     application.add_handler(settings_handler)
 
     # Добавляем обработчики для отслеживания изменений в чате
-    application.add_handler(ChatMemberHandler(
-        handle_new_chat_member, filters.ChatMember.NEW_CHAT_MEMBERS))
-    application.add_handler(ChatMemberHandler(
-        handle_left_chat_member, filters.ChatMember.LEFT_CHAT_MEMBERS))
+    application.add_handler(MessageHandler(
+        filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
+    application.add_handler(MessageHandler(
+        filters.StatusUpdate.LEFT_CHAT_MEMBERS, handle_left_chat_member))
 
     # Добавляем обработчик ответов на опросы
     application.add_handler(PollAnswerHandler(handle_poll_answer))
