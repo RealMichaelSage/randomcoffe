@@ -616,7 +616,7 @@ async def save_pairs_and_create_message(session, pairs, chat_id):
     return message
 
 
-async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка входа в меню настроек"""
     query = update.callback_query
     await query.answer()
