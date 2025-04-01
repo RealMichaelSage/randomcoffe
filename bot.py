@@ -345,7 +345,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Получаем средний рейтинг
             ratings = db.query(Rating).filter(
-                Rating.to_user_id == user.id).all()
+                Rating.rated_user_id == user.id).all()
             avg_rating = sum([r.rating for r in ratings]) / \
                 len(ratings) if ratings else 0
 
@@ -751,6 +751,66 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(stats_text)
 
 
+async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка ответов на опросы"""
+    answer = update.poll_answer
+    user_id = answer.user.id
+    poll_id = answer.poll_id
+
+    # Получаем последний опрос из базы данных
+    poll = db.query(WeeklyPoll).filter(
+        WeeklyPoll.message_id == poll_id).first()
+    if not poll:
+        return
+
+    # Получаем выбранный вариант ответа
+    selected_option = answer.option_ids[0] if answer.option_ids else None
+    if selected_option is None:
+        return
+
+    # Преобразуем индекс варианта в текст ответа
+    response_text = ["Да", "Нет", "Пока что не знаю"][selected_option]
+
+    # Сохраняем ответ в базу данных
+    poll_response = PollResponse(
+        poll_id=poll.id,
+        user_id=user_id,
+        response=response_text,
+        created_at=datetime.now()
+    )
+
+    # Проверяем, существует ли уже ответ от этого пользователя
+    existing_response = db.query(PollResponse).filter(
+        PollResponse.poll_id == poll.id,
+        PollResponse.user_id == user_id
+    ).first()
+
+    if existing_response:
+        # Обновляем существующий ответ
+        existing_response.response = response_text
+        existing_response.created_at = datetime.now()
+    else:
+        # Добавляем новый ответ
+        db.add(poll_response)
+
+    db.commit()
+
+    # Если это первичный опрос и пользователь ответил "Да",
+    # предлагаем ему зарегистрироваться
+    if poll.status == 'initial' and response_text == "Да":
+        keyboard = [
+            [InlineKeyboardButton("👤 Регистрация", callback_data='register')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
+                 "Нажмите кнопку ниже, чтобы начать регистрацию:",
+            reply_markup=reply_markup
+        )
+
+
 def get_next_monday(hour=10, minute=0):
     """Возвращает дату следующего понедельника"""
     now = datetime.now()
@@ -985,66 +1045,6 @@ async def send_initial_poll(chat_id: int, context: ContextTypes.DEFAULT_TYPE) ->
     # Сохраняем ID сообщения с опросом
     poll.message_id = message.message_id
     db.commit()
-
-
-async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка ответов на опросы"""
-    answer = update.poll_answer
-    user_id = answer.user.id
-    poll_id = answer.poll_id
-
-    # Получаем последний опрос из базы данных
-    poll = db.query(WeeklyPoll).filter(
-        WeeklyPoll.message_id == poll_id).first()
-    if not poll:
-        return
-
-    # Получаем выбранный вариант ответа
-    selected_option = answer.option_ids[0] if answer.option_ids else None
-    if selected_option is None:
-        return
-
-    # Преобразуем индекс варианта в текст ответа
-    response_text = ["Да", "Нет", "Пока что не знаю"][selected_option]
-
-    # Сохраняем ответ в базу данных
-    poll_response = PollResponse(
-        poll_id=poll.id,
-        user_id=user_id,
-        response=response_text,
-        created_at=datetime.now()
-    )
-
-    # Проверяем, существует ли уже ответ от этого пользователя
-    existing_response = db.query(PollResponse).filter(
-        PollResponse.poll_id == poll.id,
-        PollResponse.user_id == user_id
-    ).first()
-
-    if existing_response:
-        # Обновляем существующий ответ
-        existing_response.response = response_text
-        existing_response.created_at = datetime.now()
-    else:
-        # Добавляем новый ответ
-        db.add(poll_response)
-
-    db.commit()
-
-    # Если это первичный опрос и пользователь ответил "Да",
-    # предлагаем ему зарегистрироваться
-    if poll.status == 'initial' and response_text == "Да":
-        keyboard = [
-            [InlineKeyboardButton("👤 Регистрация", callback_data='register')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
-                 "Нажмите кнопку ниже, чтобы начать регистрацию:",
-            reply_markup=reply_markup
-        )
 
 
 def main():
