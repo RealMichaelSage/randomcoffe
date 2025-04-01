@@ -7,7 +7,7 @@ Create Date: 2024-03-21 12:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 # revision identifiers, used by Alembic.
 revision = 'add_bot_instances_table'
@@ -20,7 +20,7 @@ def upgrade():
     # Создаем таблицу bot_instances
     op.create_table(
         'bot_instances',
-        sa.Column('instance_id', UUID(), nullable=False),
+        sa.Column('instance_id', sa.String(36), nullable=False),
         sa.Column('last_heartbeat', sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint('instance_id')
     )

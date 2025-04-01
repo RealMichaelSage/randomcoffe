@@ -10,6 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from database import Base, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat
+import uuid
 
 # Загружаем переменные окружения из файла .env, если он существует
 load_dotenv(override=True)
@@ -1206,7 +1207,7 @@ def is_bot_running():
         if running_instances > 0:
             # Проверяем, не устарели ли записи (старше 5 минут)
             session.execute(
-                "DELETE FROM bot_instances WHERE last_heartbeat < NOW() - INTERVAL '5 minutes'"
+                "DELETE FROM bot_instances WHERE datetime(last_heartbeat) < datetime('now', '-5 minutes')"
             )
             session.commit()
 
@@ -1226,8 +1227,10 @@ def register_bot_instance():
     session = get_session()
     try:
         # Создаем запись о новом экземпляре
+        instance_id = str(uuid.uuid4())
         session.execute(
-            "INSERT INTO bot_instances (instance_id, last_heartbeat) VALUES (gen_random_uuid(), NOW())"
+            "INSERT INTO bot_instances (instance_id, last_heartbeat) VALUES (?, datetime('now'))",
+            (instance_id,)
         )
         session.commit()
         return True
@@ -1243,7 +1246,7 @@ def update_heartbeat():
     session = get_session()
     try:
         session.execute(
-            "UPDATE bot_instances SET last_heartbeat = NOW() WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
+            "UPDATE bot_instances SET last_heartbeat = datetime('now') WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
         )
         session.commit()
     finally:
