@@ -9,7 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, B
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler, ChatMemberHandler, PollAnswerHandler
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
-from database import Base, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat
+from database import Base, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat, BotInstance
 import uuid
 
 # Загружаем переменные окружения из файла .env, если он существует
@@ -1200,22 +1200,18 @@ def is_bot_running():
     session = get_session()
     try:
         # Проверяем, есть ли активные экземпляры бота
-        running_instances = session.query(func.count()).select_from(
-            Base.metadata.tables['bot_instances']
-        ).scalar()
+        running_instances = session.query(BotInstance).count()
 
         if running_instances > 0:
             # Проверяем, не устарели ли записи (старше 5 минут)
-            session.execute(
-                "DELETE FROM bot_instances WHERE datetime(last_heartbeat) < datetime('now', '-5 minutes')"
-            )
+            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
+            session.query(BotInstance).filter(
+                BotInstance.last_heartbeat < cutoff_time
+            ).delete()
             session.commit()
 
             # Проверяем оставшиеся записи
-            running_instances = session.query(func.count()).select_from(
-                Base.metadata.tables['bot_instances']
-            ).scalar()
-
+            running_instances = session.query(BotInstance).count()
             return running_instances > 0
         return False
     finally:
@@ -1227,11 +1223,11 @@ def register_bot_instance():
     session = get_session()
     try:
         # Создаем запись о новом экземпляре
-        instance_id = str(uuid.uuid4())
-        session.execute(
-            "INSERT INTO bot_instances (instance_id, last_heartbeat) VALUES (?, datetime('now'))",
-            (instance_id,)
+        instance = BotInstance(
+            instance_id=str(uuid.uuid4()),
+            last_heartbeat=datetime.utcnow()
         )
+        session.add(instance)
         session.commit()
         return True
     except Exception as e:
@@ -1245,10 +1241,12 @@ def update_heartbeat():
     """Обновляет время последнего heartbeat для текущего экземпляра"""
     session = get_session()
     try:
-        session.execute(
-            "UPDATE bot_instances SET last_heartbeat = datetime('now') WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
-        )
-        session.commit()
+        latest_instance = session.query(BotInstance).order_by(
+            BotInstance.last_heartbeat.desc()
+        ).first()
+        if latest_instance:
+            latest_instance.last_heartbeat = datetime.utcnow()
+            session.commit()
     finally:
         session.close()
 
@@ -1347,10 +1345,12 @@ def main():
         # Удаляем запись о текущем экземпляре
         session = get_session()
         try:
-            session.execute(
-                "DELETE FROM bot_instances WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
-            )
-            session.commit()
+            latest_instance = session.query(BotInstance).order_by(
+                BotInstance.last_heartbeat.desc()
+            ).first()
+            if latest_instance:
+                session.delete(latest_instance)
+                session.commit()
         finally:
             session.close()
 

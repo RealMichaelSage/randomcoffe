@@ -146,6 +146,14 @@ class PollResponse(Base):
     user = relationship("User", back_populates="poll_responses")
 
 
+class BotInstance(Base):
+    """Модель для отслеживания экземпляров бота"""
+    __tablename__ = 'bot_instances'
+
+    instance_id = Column(String(36), primary_key=True)
+    last_heartbeat = Column(DateTime, nullable=False)
+
+
 def init_db():
     """Инициализация базы данных"""
     database_url = os.getenv('DATABASE_URL')
