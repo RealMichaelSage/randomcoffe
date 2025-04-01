@@ -152,11 +152,44 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    await query.message.reply_text(
-        "Давайте начнем регистрацию!\n"
-        "Как вас зовут? (Введите ваше имя)"
-    )
-    return ENTER_NAME
+    session = next(get_session())
+    try:
+        # Проверяем, не зарегистрирован ли уже пользователь
+        existing_user = session.query(User).filter(
+            User.telegram_id == query.from_user.id).first()
+
+        if existing_user:
+            keyboard = [
+                [
+                    InlineKeyboardButton("👤 Профиль", callback_data='profile'),
+                    InlineKeyboardButton(
+                        "⚙️ Настройки", callback_data='settings')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 Статистика", callback_data='stats'),
+                    InlineKeyboardButton("❓ FAQ", callback_data='faq')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text(
+                "Вы уже зарегистрированы! Используйте кнопки ниже для управления профилем:",
+                reply_markup=reply_markup
+            )
+            return ConversationHandler.END
+
+        await query.message.reply_text(
+            "Давайте начнем регистрацию!\n"
+            "Как вас зовут? (Введите ваше имя)"
+        )
+        return ENTER_NAME
+    except Exception as e:
+        logger.error(f"Error in register: {e}")
+        await query.message.reply_text("Произошла ошибка при начале регистрации.")
+        return ConversationHandler.END
+    finally:
+        session.close()
 
 
 async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -272,10 +305,12 @@ async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE)
             existing_user.interests = context.user_data['interests']
             existing_user.language = context.user_data['language']
             existing_user.meeting_time = context.user_data['meeting_time']
+            existing_user.username = update.effective_user.username
         else:
             # Создаем нового пользователя
             user = User(
                 telegram_id=update.effective_user.id,
+                username=update.effective_user.username,
                 nickname=context.user_data['name'],
                 age=context.user_data['age'],
                 gender=context.user_data['gender'],
@@ -318,6 +353,8 @@ async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error in enter_meeting_time: {e}")
         await update.message.reply_text("Произошла ошибка при сохранении профиля.")
         return ConversationHandler.END
+    finally:
+        session.close()
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
