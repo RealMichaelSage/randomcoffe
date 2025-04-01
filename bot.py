@@ -893,11 +893,11 @@ def main():
     if job_queue:
         # Отправляем опрос каждый понедельник в 10:00
         job_queue.run_repeating(send_weekly_poll, interval=timedelta(days=7),
-                                first=get_next_monday(), context=None)
+                                first=get_next_monday())
 
         # Отправляем результаты и создаем пары каждый понедельник в 17:00
         job_queue.run_repeating(create_pairs, interval=timedelta(days=7),
-                                first=get_next_monday(hour=17), context=None)
+                                first=get_next_monday(hour=17))
 
     # Запускаем бота
     print("Бот запускается...")
