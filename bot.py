@@ -8,16 +8,16 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from database import init_db, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse
 
 # Загружаем переменные окружения из файла .env, если он существует
-load_dotenv()
+load_dotenv(override=True)
 
 # Получаем переменные окружения
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
 
-GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
+GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_ID')
 if not GROUP_CHAT_ID:
-    raise ValueError("GROUP_CHAT_ID not found in environment variables")
+    raise ValueError("TELEGRAM_GROUP_ID not found in environment variables")
 
 # Конвертируем GROUP_CHAT_ID в int
 GROUP_CHAT_ID = int(GROUP_CHAT_ID)
@@ -58,29 +58,41 @@ active_meetings = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
-    # Проверяем, зарегистрирован ли пользователь
-    user_id = update.effective_user.id
-    # TODO: Добавить проверку в базе данных
+    """Обработка команды /start"""
+    # Проверяем, есть ли пользователь в базе данных
+    user = db.query(User).filter(User.telegram_id ==
+                                 update.effective_user.id).first()
 
-    keyboard = [
-        [
-            InlineKeyboardButton("👤 Регистрация", callback_data='register'),
-            InlineKeyboardButton("⚙️ Настройки", callback_data='settings')
-        ],
-        [
-            InlineKeyboardButton("📊 Статистика", callback_data='stats'),
-            InlineKeyboardButton("❓ FAQ", callback_data='faq')
+    if not user:
+        # Создаем клавиатуру с кнопками
+        keyboard = [
+            [InlineKeyboardButton("👤 Регистрация", callback_data='register')],
+            [InlineKeyboardButton("⚙️ Настройки", callback_data='settings')],
+            [InlineKeyboardButton("📊 Статистика", callback_data='stats')],
+            [InlineKeyboardButton("❓ FAQ", callback_data='faq')]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        "Привет! Я бот Random Coffee. Я помогу вам организовать случайные встречи за кофе.\n\n"
-        "Для начала работы нужно зарегистрироваться. Нажмите кнопку 'Регистрация'.",
-        reply_markup=reply_markup
-    )
-    return ConversationHandler.END
+        await update.message.reply_text(
+            "Привет! Я бот Random Coffee. Я помогу вам организовать случайные встречи за кофе.\n\n"
+            "Для начала работы нужно зарегистрироваться.\nНажмите кнопку 'Регистрация'.",
+            reply_markup=reply_markup
+        )
+        return CHOOSING
+    else:
+        # Если пользователь уже зарегистрирован
+        keyboard = [
+            [InlineKeyboardButton("⚙️ Настройки", callback_data='settings')],
+            [InlineKeyboardButton("📊 Статистика", callback_data='stats')],
+            [InlineKeyboardButton("❓ FAQ", callback_data='faq')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"С возвращением, {user.name}! Что бы вы хотели сделать?",
+            reply_markup=reply_markup
+        )
+        return CHOOSING
 
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1035,16 +1047,22 @@ async def send_initial_poll(chat_id: int, context: ContextTypes.DEFAULT_TYPE) ->
     db.commit()
 
     # Отправляем опрос
-    message = await context.bot.send_poll(
+    message = await context.bot.send_message(
         chat_id=chat_id,
-        question="Тебе интересна идея встреч в этом чате?",
-        options=["Да", "Нет", "Пока что не знаю"],
-        is_anonymous=False
+        text="Тебе интересна идея встреч в этом чате?"
     )
 
     # Сохраняем ID сообщения с опросом
     poll.message_id = message.message_id
     db.commit()
+
+    # Отправляем опрос с вариантами ответов
+    await context.bot.send_poll(
+        chat_id=chat_id,
+        question="Тебе интересна идея встреч в этом чате?",
+        options=["Да", "Нет", "Пока что не знаю"],
+        is_anonymous=False
+    )
 
 
 def main():
