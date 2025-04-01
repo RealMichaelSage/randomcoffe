@@ -19,9 +19,23 @@ if not TELEGRAM_BOT_TOKEN:
 
 # Настройка базы данных
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///random_coffee.db')
+
+# Создаем движок базы данных
 engine = create_engine(DATABASE_URL)
+
+# Создаем все таблицы
 Base.metadata.create_all(engine)
+
+# Создаем фабрику сессий
 Session = sessionmaker(bind=engine)
+
+# Функция для получения новой сессии
+
+
+def get_session():
+    """Создает и возвращает новую сессию базы данных"""
+    return Session()
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -58,7 +72,7 @@ active_meetings = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка команды /start"""
     chat = update.effective_chat
-    session = Session()
+    session = get_session()
 
     try:
         # Проверяем, есть ли чат в базе данных
@@ -204,7 +218,7 @@ async def enter_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Завершение регистрации"""
     context.user_data['meeting_time'] = update.message.text
-    session = Session()
+    session = get_session()
 
     try:
         # Проверяем, существует ли пользователь
@@ -274,7 +288,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
     query = update.callback_query
     await query.answer()
-    session = Session()
+    session = get_session()
 
     try:
         if query.data == 'register':
@@ -412,7 +426,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def create_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
     """Создает еженедельный опрос"""
-    session = Session()
+    session = get_session()
     try:
         # Получаем все активные чаты
         active_chats = session.query(Chat).filter_by(is_active=True).all()
@@ -451,7 +465,7 @@ async def create_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
 
 async def distribute_pairs(context: ContextTypes.DEFAULT_TYPE):
     """Распределяет пары для встреч"""
-    session = Session()
+    session = get_session()
     try:
         # Получаем все активные чаты
         active_chats = session.query(Chat).filter_by(is_active=True).all()
@@ -664,14 +678,14 @@ async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сброс настроек пользователя"""
     query = update.callback_query
-    user = Session().query(User).filter(
+    user = get_session().query(User).filter(
         User.telegram_id == query.from_user.id).first()
     if user:
-        preferences = Session().query(UserPreferences).filter(
+        preferences = get_session().query(UserPreferences).filter(
             UserPreferences.user_id == user.id).first()
         if preferences:
-            Session().delete(preferences)
-            Session().commit()
+            get_session().delete(preferences)
+            get_session().commit()
             await query.message.reply_text("✅ Настройки успешно сброшены!")
         else:
             await query.message.reply_text("ℹ️ У вас пока нет сохраненных настроек.")
@@ -681,20 +695,20 @@ async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_gender_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого пола"""
-    user = Session().query(User).filter(User.telegram_id ==
-                                        update.effective_user.id).first()
+    user = get_session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = Session().query(UserPreferences).filter(
+    preferences = get_session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        Session().add(preferences)
+        get_session().add(preferences)
 
     preferences.preferred_gender = update.message.text
-    Session().commit()
+    get_session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемый пол собеседника установлен: {update.message.text}")
     return ConversationHandler.END
@@ -726,21 +740,21 @@ async def save_age_max_preference(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text(f"Пожалуйста, введите корректный возраст (от {min_age} до 100)")
             return SETTINGS_AGE_MAX
 
-        user = Session().query(User).filter(User.telegram_id ==
-                                            update.effective_user.id).first()
+        user = get_session().query(User).filter(User.telegram_id ==
+                                                update.effective_user.id).first()
         if not user:
             await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
             return ConversationHandler.END
 
-        preferences = Session().query(UserPreferences).filter(
+        preferences = get_session().query(UserPreferences).filter(
             UserPreferences.user_id == user.id).first()
         if not preferences:
             preferences = UserPreferences(user_id=user.id)
-            Session().add(preferences)
+            get_session().add(preferences)
 
         preferences.age_range_min = min_age
         preferences.age_range_max = age
-        Session().commit()
+        get_session().commit()
 
         await update.message.reply_text(
             f"✅ Возрастной диапазон собеседников установлен: {min_age}-{age} лет"
@@ -753,20 +767,20 @@ async def save_age_max_preference(update: Update, context: ContextTypes.DEFAULT_
 
 async def save_language_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого языка"""
-    user = Session().query(User).filter(User.telegram_id ==
-                                        update.effective_user.id).first()
+    user = get_session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = Session().query(UserPreferences).filter(
+    preferences = get_session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        Session().add(preferences)
+        get_session().add(preferences)
 
     preferences.preferred_languages = update.message.text
-    Session().commit()
+    get_session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемый язык общения установлен: {update.message.text}")
     return ConversationHandler.END
@@ -774,20 +788,20 @@ async def save_language_preference(update: Update, context: ContextTypes.DEFAULT
 
 async def save_interests_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемых интересов"""
-    user = Session().query(User).filter(User.telegram_id ==
-                                        update.effective_user.id).first()
+    user = get_session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = Session().query(UserPreferences).filter(
+    preferences = get_session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        Session().add(preferences)
+        get_session().add(preferences)
 
     preferences.preferred_interests = update.message.text
-    Session().commit()
+    get_session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемые интересы установлены: {update.message.text}")
     return ConversationHandler.END
@@ -795,20 +809,20 @@ async def save_interests_preference(update: Update, context: ContextTypes.DEFAUL
 
 async def save_time_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого времени"""
-    user = Session().query(User).filter(User.telegram_id ==
-                                        update.effective_user.id).first()
+    user = get_session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = Session().query(UserPreferences).filter(
+    preferences = get_session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        Session().add(preferences)
+        get_session().add(preferences)
 
     preferences.preferred_meeting_times = update.message.text
-    Session().commit()
+    get_session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемое время встреч установлено: {update.message.text}")
     return ConversationHandler.END
@@ -837,19 +851,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет статистику пользователя"""
-    user = Session().query(User).filter(User.telegram_id ==
-                                        update.effective_user.id).first()
+    user = get_session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
     if user:
         # Получаем все встречи пользователя
         total_meetings = len(user.meetings_as_user1) + \
             len(user.meetings_as_user2)
-        completed_meetings = Session().query(Meeting).filter(
+        completed_meetings = get_session().query(Meeting).filter(
             ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
             (Meeting.status == 'completed')
         ).count()
 
         # Получаем средний рейтинг
-        ratings = Session().query(Rating).filter(
+        ratings = get_session().query(Rating).filter(
             Rating.rated_user_id == user.id).all()
         avg_rating = sum([r.rating for r in ratings]) / \
             len(ratings) if ratings else 0
@@ -896,7 +910,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     poll_id = answer.poll_id
 
     # Получаем последний опрос из базы данных
-    poll = Session().query(WeeklyPoll).filter(
+    poll = get_session().query(WeeklyPoll).filter(
         WeeklyPoll.message_id == poll_id).first()
     if not poll:
         return
@@ -918,7 +932,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     # Проверяем, существует ли уже ответ от этого пользователя
-    existing_response = Session().query(PollResponse).filter(
+    existing_response = get_session().query(PollResponse).filter(
         PollResponse.poll_id == poll.id,
         PollResponse.user_id == user_id
     ).first()
@@ -929,9 +943,9 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         existing_response.created_at = datetime.now()
     else:
         # Добавляем новый ответ
-        Session().add(poll_response)
+        get_session().add(poll_response)
 
-    Session().commit()
+    get_session().commit()
 
     # Если это первичный опрос и пользователь ответил "Да",
     # предлагаем ему зарегистрироваться
@@ -961,7 +975,7 @@ def get_next_monday(hour=10, minute=0):
 
 async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
     """Отправляет еженедельный опрос"""
-    session = Session()
+    session = get_session()
     try:
         # Получаем все активные чаты
         active_chats = session.query(Chat).filter_by(is_active=True).all()
@@ -1132,7 +1146,7 @@ async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_T
         for member in update.message.new_chat_members:
             if member.id == context.bot.id:
                 # Bot was added to a new chat
-                session = Session()
+                session = get_session()
                 try:
                     chat = update.effective_chat
                     # Check if chat already exists
@@ -1164,7 +1178,7 @@ async def handle_left_chat_member(update: Update, context: ContextTypes.DEFAULT_
     """Обработка удаления бота из чата"""
     if update.message.left_chat_member and update.message.left_chat_member.id == context.bot.id:
         # Bot was removed from the chat
-        session = Session()
+        session = get_session()
         try:
             chat = update.effective_chat
             # Mark chat as inactive
