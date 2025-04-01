@@ -378,39 +378,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             keyboard = [
                 [
-                    InlineKeyboardButton("👥 Предпочитаемый пол",
-                                         callback_data='set_gender'),
                     InlineKeyboardButton(
-                        "📅 Возрастной диапазон", callback_data='set_age')
+                        "🏙 Город", callback_data='settings_city'),
+                    InlineKeyboardButton(
+                        "🔗 Соц.сеть", callback_data='settings_social_link')
                 ],
                 [
                     InlineKeyboardButton(
-                        "🗣 Язык общения", callback_data='set_language'),
+                        "ℹ️ О себе", callback_data='settings_about'),
                     InlineKeyboardButton(
-                        "🎯 Интересы", callback_data='set_interests')
+                        "💼 Работа", callback_data='settings_job')
                 ],
                 [
                     InlineKeyboardButton(
-                        "🕒 Удобное время", callback_data='set_time'),
-                    InlineKeyboardButton("🔄 Сбросить настройки",
-                                         callback_data='reset_settings')
+                        "📅 Дата рождения", callback_data='settings_birth_date'),
+                    InlineKeyboardButton(
+                        "🖼 Аватар", callback_data='settings_avatar')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎯 Хобби", callback_data='settings_hobbies'),
+                    InlineKeyboardButton(
+                        "👁 Видимость", callback_data='settings_visibility')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "◀️ Назад", callback_data='back_to_main')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            settings_text = "⚙️ Настройки подбора собеседников:\n\n"
-            if preferences:
-                settings_text += (
-                    f"👥 Предпочитаемый пол: {preferences.preferred_gender or 'Любой'}\n"
-                    f"📅 Возраст: {preferences.age_range_min or '18'}-{preferences.age_range_max or '100'} лет\n"
-                    f"🗣 Язык общения: {preferences.preferred_languages or 'Любой'}\n"
-                    f"🎯 Интересы: {preferences.preferred_interests or 'Любые'}\n"
-                    f"🕒 Удобное время: {preferences.preferred_meeting_times or 'Любое'}\n"
-                )
-            else:
-                settings_text += "Настройки пока не заданы. Используйте кнопки ниже для настройки предпочтений."
+            settings_text = (
+                "⚙️ Настройки профиля:\n\n"
+                f"🏙 Город: {user.city or 'Не указан'}\n"
+                f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
+                f"ℹ️ О себе: {user.about or 'Не указано'}\n"
+                f"💼 Работа: {user.job or 'Не указана'}\n"
+                f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
+                f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
+                f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}"
+            )
 
             await query.message.reply_text(settings_text, reply_markup=reply_markup)
+            return ConversationHandler.END
         elif query.data.startswith('set_'):
             # получаем тип настройки (gender, age, language и т.д.)
             setting_type = query.data[4:]
@@ -1511,6 +1521,106 @@ async def update_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка входа в меню настроек"""
+    query = update.callback_query
+    await query.answer()
+
+    session = next(get_session())
+    try:
+        # Проверяем, зарегистрирован ли пользователь
+        user = session.query(User).filter(
+            User.telegram_id == query.from_user.id).first()
+        if not user:
+            await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
+            return ConversationHandler.END
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🏙 Город", callback_data='settings_city'),
+                InlineKeyboardButton(
+                    "🔗 Соц.сеть", callback_data='settings_social_link')
+            ],
+            [
+                InlineKeyboardButton(
+                    "ℹ️ О себе", callback_data='settings_about'),
+                    InlineKeyboardButton(
+                        "💼 Работа", callback_data='settings_job')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📅 Дата рождения", callback_data='settings_birth_date'),
+                        InlineKeyboardButton(
+                            "🖼 Аватар", callback_data='settings_avatar')
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🎯 Хобби", callback_data='settings_hobbies'),
+                            InlineKeyboardButton(
+                                "👁 Видимость", callback_data='settings_visibility')
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "◀️ Назад", callback_data='back_to_main')
+                        ]
+                    ]
+                ]
+                reply_markup= InlineKeyboardMarkup(keyboard)
+
+                settings_text= (
+                    "⚙️ Настройки профиля:\n\n"
+                    f"🏙 Город: {user.city or 'Не указан'}\n"
+                    f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
+                    f"ℹ️ О себе: {user.about or 'Не указано'}\n"
+                    f"💼 Работа: {user.job or 'Не указана'}\n"
+                    f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
+                    f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
+                    f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}"
+                )
+
+                await query.message.reply_text(settings_text, reply_markup=reply_markup)
+                return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in settings: {e}")
+                await query.message.reply_text("Произошла ошибка при открытии настроек.")
+                return ConversationHandler.END
+            finally:
+                session.close()
+
+
+async def update_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление видимости профиля"""
+    query = update.callback_query
+    await query.answer()
+    
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(User.telegram_id == query.from_user.id).first()
+        if not user:
+            await query.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        visibility = query.data.split('_')[1]  # 'public' или 'private'
+        user.is_visible = (visibility == 'public')
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        visibility_text = "Публичный" if user.is_visible else "Приватный"
+        await query.message.reply_text(
+            f"✅ Видимость профиля изменена на: {visibility_text}",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_visibility: {e}")
+        await query.message.reply_text("Произошла ошибка при обновлении видимости профиля.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
 def main():
     """Запуск бота"""
     # Проверяем, не запущен ли уже экземпляр бота
@@ -1552,18 +1662,45 @@ def main():
 
         # Создаем обработчик разговора для настроек
         settings_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(
-                settings, pattern='^settings$')],
+            entry_points=[CallbackQueryHandler(settings, pattern='^settings$')],
             states={
-                SETTINGS_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_city)],
-                SETTINGS_SOCIAL_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_social_link)],
-                SETTINGS_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_about)],
-                SETTINGS_JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_job)],
-                SETTINGS_BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_birth_date)],
-                SETTINGS_AVATAR: [MessageHandler(filters.PHOTO, update_avatar)],
-                SETTINGS_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_hobbies)],
+                SETTINGS_CITY: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите ваш город:"), pattern='^settings_city$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_city)
+                ],
+                SETTINGS_SOCIAL_LINK: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите ссылку на вашу социальную сеть:"), pattern='^settings_social_link$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_social_link)
+                ],
+                SETTINGS_ABOUT: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Расскажите о себе:"), pattern='^settings_about$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_about)
+                ],
+                SETTINGS_JOB: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Кем вы работаете?"), pattern='^settings_job$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_job)
+                ],
+                SETTINGS_BIRTH_DATE: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите вашу дату рождения (в формате ДД.ММ.ГГГГ):"), pattern='^settings_birth_date$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_birth_date)
+                ],
+                SETTINGS_AVATAR: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Отправьте ваше фото для аватара:"), pattern='^settings_avatar$'),
+                    MessageHandler(filters.PHOTO, update_avatar)
+                ],
+                SETTINGS_HOBBIES: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Расскажите о ваших хобби:"), pattern='^settings_hobbies$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_hobbies)
+                ],
+                SETTINGS_VISIBILITY: [
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Выберите видимость профиля:", reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("Публичный", callback_data='visibility_public')],
+                        [InlineKeyboardButton("Приватный", callback_data='visibility_private')]
+                    ])), pattern='^settings_visibility$'),
+                    CallbackQueryHandler(lambda u, c: update_visibility(u, c), pattern='^visibility_')
+                ]
             },
-            fallbacks=[CommandHandler('cancel', start)],
+            fallbacks=[CallbackQueryHandler(settings, pattern='^back_to_main$')],
             per_chat=True,
             per_user=True,
             per_message=True
