@@ -946,8 +946,8 @@ def is_bot_running():
         running_instances = session.query(BotInstance).count()
 
         if running_instances > 0:
-            # Проверяем, не устарели ли записи (старше 2 минут)
-            cutoff_time = datetime.utcnow() - timedelta(minutes=2)
+            # Проверяем, не устарели ли записи (старше 1 минуты)
+            cutoff_time = datetime.utcnow() - timedelta(minutes=1)
             stale_instances = session.query(BotInstance).filter(
                 BotInstance.last_heartbeat < cutoff_time
             ).all()
@@ -975,6 +975,20 @@ def register_bot_instance():
     """Регистрирует новый экземпляр бота"""
     session = next(get_session())
     try:
+        # Удаляем все устаревшие записи
+        cutoff_time = datetime.utcnow() - timedelta(minutes=1)
+        stale_instances = session.query(BotInstance).filter(
+            BotInstance.last_heartbeat < cutoff_time
+        ).all()
+        for instance in stale_instances:
+            session.delete(instance)
+        session.commit()
+
+        # Проверяем, есть ли активные экземпляры
+        if session.query(BotInstance).count() > 0:
+            logger.warning("Another bot instance is already running")
+            return False
+
         # Создаем запись о новом экземпляре
         instance = BotInstance(
             instance_id=str(uuid.uuid4()),
@@ -1329,7 +1343,11 @@ def main():
         logger.info("Bot is starting...")
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True  # Игнорируем старые обновления
+            drop_pending_updates=True,  # Игнорируем старые обновления
+            read_timeout=30,  # Увеличиваем таймаут чтения
+            write_timeout=30,  # Увеличиваем таймаут записи
+            connect_timeout=30,  # Увеличиваем таймаут подключения
+            pool_timeout=30  # Увеличиваем таймаут пула
         )
     except Exception as e:
         logger.error(f"Error in main: {e}")
