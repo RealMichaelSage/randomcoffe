@@ -1,6 +1,8 @@
 import os
 import logging
 import random
+import fcntl
+import sys
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, Bot, ReplyKeyboardMarkup, KeyboardButton, ChatMemberUpdated, Chat
@@ -1194,81 +1196,96 @@ async def handle_left_chat_member(update: Update, context: ContextTypes.DEFAULT_
 
 def main():
     """Запуск бота"""
-    # Создаем приложение
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Создаем файл блокировки
+    lock_file = open('/tmp/random_coffee_bot.lock', 'w')
+    try:
+        fcntl.lockf(lock_file, fcntl.F_TLOCK, 0)
+    except IOError:
+        logger.error("Another instance of the bot is already running")
+        sys.exit(1)
 
-    # Создаем обработчик разговора для регистрации
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(register, pattern='^register$')],
-        states={
-            ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
-            ENTER_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_age)],
-            ENTER_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_gender)],
-            ENTER_PROFESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_profession)],
-            ENTER_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_interests)],
-            ENTER_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_language)],
-            ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
-        },
-        fallbacks=[CommandHandler('cancel', start)],
-        per_chat=True,
-        per_user=True,
-        per_message=True
-    )
+    try:
+        # Создаем приложение
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Создаем обработчик разговора для настроек
-    settings_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_settings, pattern='^set_')],
-        states={
-            SETTINGS_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_gender_preference)],
-            SETTINGS_AGE_MIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_min_preference)],
-            SETTINGS_AGE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_max_preference)],
-            SETTINGS_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_language_preference)],
-            SETTINGS_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_interests_preference)],
-            SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
-        },
-        fallbacks=[CommandHandler('cancel', start)],
-        per_chat=True,
-        per_user=True,
-        per_message=True
-    )
-
-    # Добавляем обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("stats", stats))
-
-    # Добавляем обработчик разговора
-    application.add_handler(conv_handler)
-    application.add_handler(settings_handler)
-
-    # Добавляем обработчики для отслеживания изменений в чате
-    application.add_handler(MessageHandler(
-        filters.ALL, handle_new_chat_member))
-    application.add_handler(MessageHandler(
-        filters.ALL, handle_left_chat_member))
-
-    # Добавляем обработчик ответов на опросы
-    application.add_handler(PollAnswerHandler(handle_poll_answer))
-
-    # Настраиваем отправку еженедельных опросов
-    if application.job_queue:
-        # Отправляем опрос каждый понедельник в 10:00
-        application.job_queue.run_repeating(
-            send_weekly_poll,
-            interval=timedelta(days=7),
-            first=get_next_monday()
+        # Создаем обработчик разговора для регистрации
+        conv_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(
+                register, pattern='^register$')],
+            states={
+                ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
+                ENTER_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_age)],
+                ENTER_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_gender)],
+                ENTER_PROFESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_profession)],
+                ENTER_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_interests)],
+                ENTER_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_language)],
+                ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
+            },
+            fallbacks=[CommandHandler('cancel', start)],
+            per_chat=True,
+            per_user=True,
+            per_message=True
         )
 
-        # Отправляем результаты и создаем пары каждый понедельник в 17:00
-        application.job_queue.run_repeating(
-            distribute_pairs,
-            interval=timedelta(days=7),
-            first=get_next_monday(hour=17)
+        # Создаем обработчик разговора для настроек
+        settings_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(
+                handle_settings, pattern='^set_')],
+            states={
+                SETTINGS_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_gender_preference)],
+                SETTINGS_AGE_MIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_min_preference)],
+                SETTINGS_AGE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_max_preference)],
+                SETTINGS_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_language_preference)],
+                SETTINGS_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_interests_preference)],
+                SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
+            },
+            fallbacks=[CommandHandler('cancel', start)],
+            per_chat=True,
+            per_user=True,
+            per_message=True
         )
 
-    # Запускаем бота
-    print("Бот запускается...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Добавляем обработчики
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("stats", stats))
+
+        # Добавляем обработчик разговора
+        application.add_handler(conv_handler)
+        application.add_handler(settings_handler)
+
+        # Добавляем обработчики для отслеживания изменений в чате
+        application.add_handler(MessageHandler(
+            filters.ALL, handle_new_chat_member))
+        application.add_handler(MessageHandler(
+            filters.ALL, handle_left_chat_member))
+
+        # Добавляем обработчик ответов на опросы
+        application.add_handler(PollAnswerHandler(handle_poll_answer))
+
+        # Настраиваем отправку еженедельных опросов
+        if application.job_queue:
+            # Отправляем опрос каждый понедельник в 10:00
+            application.job_queue.run_repeating(
+                send_weekly_poll,
+                interval=timedelta(days=7),
+                first=get_next_monday()
+            )
+
+            # Отправляем результаты и создаем пары каждый понедельник в 17:00
+            application.job_queue.run_repeating(
+                distribute_pairs,
+                interval=timedelta(days=7),
+                first=get_next_monday(hour=17)
+            )
+
+        # Запускаем бота
+        print("Бот запускается...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
+        # Освобождаем блокировку при завершении
+        fcntl.lockf(lock_file, fcntl.F_ULOCK, 0)
+        lock_file.close()
 
 
 if __name__ == '__main__':
@@ -1278,3 +1295,4 @@ if __name__ == '__main__':
         print("\nБот остановлен пользователем")
     except Exception as e:
         print(f"Ошибка при запуске бота: {e}")
+        logger.error(f"Error: {e}")
