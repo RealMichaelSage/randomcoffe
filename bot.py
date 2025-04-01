@@ -375,57 +375,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'reset_settings':
             await reset_settings(update, context)
         elif query.data == 'stats':
-            # Получаем статистику пользователя
-            user = session.query(User).filter(
-                User.telegram_id == query.from_user.id).first()
-            if user:
-                # Получаем все встречи пользователя
-                total_meetings = len(user.meetings_as_user1) + \
-                    len(user.meetings_as_user2)
-                completed_meetings = session.query(Meeting).filter(
-                    ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
-                    (Meeting.status == 'completed')
-                ).count()
-
-                # Получаем средний рейтинг
-                ratings = session.query(Rating).filter(
-                    Rating.to_user_id == user.id).all()
-                avg_rating = sum([r.rating for r in ratings]) / \
-                    len(ratings) if ratings else 0
-
-                # Определяем уровень опыта
-                experience_level = "🌱 Новичок"
-                if total_meetings >= 10:
-                    experience_level = "🌿 Регуляр"
-                if total_meetings >= 20:
-                    experience_level = "🌳 Эксперт"
-
-                stats_text = (
-                    "📊 Ваша статистика:\n\n"
-                    f"👥 Всего встреч: {total_meetings}\n"
-                    f"✅ Завершённых встреч: {completed_meetings}\n"
-                    f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
-                    f"📈 Уровень опыта: {experience_level}\n"
-                    f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
-                    "🏆 Достижения:\n"
-                )
-
-                # Добавляем достижения
-                if total_meetings >= 1:
-                    stats_text += "🎯 Первая встреча\n"
-                if total_meetings >= 5:
-                    stats_text += "🔥 5 встреч\n"
-                if total_meetings >= 10:
-                    stats_text += "💫 10 встреч\n"
-                if total_meetings >= 20:
-                    stats_text += "🌟 20 встреч\n"
-                if avg_rating >= 4.5:
-                    stats_text += "⭐️ Отличный собеседник\n"
-
-            else:
-                stats_text = "📊 Статистика:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
-
-            await query.message.reply_text(stats_text)
+            await stats(update, context)
     except Exception as e:
         logger.error(f"Error in button_handler: {e}")
         await query.message.reply_text("Произошла ошибка при обработке запроса.")
@@ -1135,6 +1085,68 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❓ Если у вас есть вопросы, используйте кнопку FAQ в главном меню."
     )
     await update.message.reply_text(help_text)
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка команды /stats"""
+    session = next(get_session())
+    try:
+        # Получаем пользователя
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
+            return
+
+        # Получаем все встречи пользователя
+        total_meetings = len(user.meetings_as_user1) + \
+            len(user.meetings_as_user2)
+        completed_meetings = session.query(Meeting).filter(
+            ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
+            (Meeting.status == 'completed')
+        ).count()
+
+        # Получаем средний рейтинг
+        ratings = session.query(Rating).filter(
+            Rating.to_user_id == user.id).all()
+        avg_rating = sum([r.rating for r in ratings]) / \
+            len(ratings) if ratings else 0
+
+        # Определяем уровень опыта
+        experience_level = "🌱 Новичок"
+        if total_meetings >= 10:
+            experience_level = "🌿 Регуляр"
+        if total_meetings >= 20:
+            experience_level = "🌳 Эксперт"
+
+        stats_text = (
+            "📊 Ваша статистика:\n\n"
+            f"👥 Всего встреч: {total_meetings}\n"
+            f"✅ Завершённых встреч: {completed_meetings}\n"
+            f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
+            f"📈 Уровень опыта: {experience_level}\n"
+            f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
+            "🏆 Достижения:\n"
+        )
+
+        # Добавляем достижения
+        if total_meetings >= 1:
+            stats_text += "🎯 Первая встреча\n"
+        if total_meetings >= 5:
+            stats_text += "🔥 5 встреч\n"
+        if total_meetings >= 10:
+            stats_text += "💫 10 встреч\n"
+        if total_meetings >= 20:
+            stats_text += "🌟 20 встреч\n"
+        if avg_rating >= 4.5:
+            stats_text += "⭐️ Отличный собеседник\n"
+
+        await update.message.reply_text(stats_text)
+    except Exception as e:
+        logger.error(f"Error in stats: {e}")
+        await update.message.reply_text("Произошла ошибка при получении статистики.")
+    finally:
+        session.close()
 
 
 def main():
