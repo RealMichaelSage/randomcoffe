@@ -30,9 +30,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация базы данных
-db = init_db()
-
 # Состояния регистрации
 (
     ENTER_NAME,
