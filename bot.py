@@ -1194,14 +1194,72 @@ async def handle_left_chat_member(update: Update, context: ContextTypes.DEFAULT_
             session.close()
 
 
+def is_bot_running():
+    """Проверяет, не запущен ли уже экземпляр бота"""
+    session = get_session()
+    try:
+        # Проверяем, есть ли активные экземпляры бота
+        running_instances = session.query(func.count()).select_from(
+            Base.metadata.tables['bot_instances']
+        ).scalar()
+
+        if running_instances > 0:
+            # Проверяем, не устарели ли записи (старше 5 минут)
+            session.execute(
+                "DELETE FROM bot_instances WHERE last_heartbeat < NOW() - INTERVAL '5 minutes'"
+            )
+            session.commit()
+
+            # Проверяем оставшиеся записи
+            running_instances = session.query(func.count()).select_from(
+                Base.metadata.tables['bot_instances']
+            ).scalar()
+
+            return running_instances > 0
+        return False
+    finally:
+        session.close()
+
+
+def register_bot_instance():
+    """Регистрирует новый экземпляр бота"""
+    session = get_session()
+    try:
+        # Создаем запись о новом экземпляре
+        session.execute(
+            "INSERT INTO bot_instances (instance_id, last_heartbeat) VALUES (gen_random_uuid(), NOW())"
+        )
+        session.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error registering bot instance: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def update_heartbeat():
+    """Обновляет время последнего heartbeat для текущего экземпляра"""
+    session = get_session()
+    try:
+        session.execute(
+            "UPDATE bot_instances SET last_heartbeat = NOW() WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
 def main():
     """Запуск бота"""
-    # Создаем файл блокировки
-    lock_file = open('/tmp/random_coffee_bot.lock', 'w')
-    try:
-        fcntl.lockf(lock_file, fcntl.F_TLOCK, 0)
-    except IOError:
+    # Проверяем, не запущен ли уже экземпляр бота
+    if is_bot_running():
         logger.error("Another instance of the bot is already running")
+        sys.exit(1)
+
+    # Регистрируем новый экземпляр
+    if not register_bot_instance():
+        logger.error("Failed to register bot instance")
         sys.exit(1)
 
     try:
@@ -1283,9 +1341,15 @@ def main():
         print("Бот запускается...")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     finally:
-        # Освобождаем блокировку при завершении
-        fcntl.lockf(lock_file, fcntl.F_ULOCK, 0)
-        lock_file.close()
+        # Удаляем запись о текущем экземпляре
+        session = get_session()
+        try:
+            session.execute(
+                "DELETE FROM bot_instances WHERE instance_id = (SELECT instance_id FROM bot_instances ORDER BY last_heartbeat DESC LIMIT 1)"
+            )
+            session.commit()
+        finally:
+            session.close()
 
 
 if __name__ == '__main__':
