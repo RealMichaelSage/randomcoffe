@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from typing import Dict
@@ -22,37 +22,43 @@ class User(Base):
     nickname = Column(String(100))
     age = Column(Integer)
     gender = Column(String(10))
-    profession = Column(String(100))
-    interests = Column(Text)
+    interests = Column(String)
     language = Column(String(50))
     meeting_time = Column(String(50))
-    created_at = Column(DateTime, default=datetime.now)
-    experience = Column(Integer, default=0)
-    total_meetings = Column(Integer, default=0)
-    completed_meetings = Column(Integer, default=0)
-    average_rating = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(8))
     is_active = Column(Boolean, default=True)
+    show_profile = Column(Boolean, default=True)
+    experience_level = Column(Integer, default=0)
+    total_meetings = Column(Integer, default=0)
+    average_rating = Column(Float, default=0.0)
 
     # Связи с другими таблицами
-    preferences = relationship(
-        "UserPreferences", back_populates="user", uselist=False)
+    preferences = relationship("UserPreferences", back_populates="user")
+    meetings_as_user1 = relationship(
+        "Meeting", foreign_keys="Meeting.user1_id", back_populates="user1")
+    meetings_as_user2 = relationship(
+        "Meeting", foreign_keys="Meeting.user2_id", back_populates="user2")
     ratings_given = relationship(
         "Rating", foreign_keys="Rating.from_user_id", back_populates="from_user")
     ratings_received = relationship(
         "Rating", foreign_keys="Rating.to_user_id", back_populates="to_user")
+    poll_responses = relationship("PollResponse", back_populates="user")
 
 
 class UserPreferences(Base):
     __tablename__ = 'user_preferences'
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), unique=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
     preferred_gender = Column(String(10))
     age_range_min = Column(Integer)
     age_range_max = Column(Integer)
     preferred_languages = Column(String(100))
-    preferred_interests = Column(Text)
-    preferred_meeting_times = Column(String(50))
+    preferred_interests = Column(String)
+    preferred_meeting_times = Column(String(100))
+    only_new_users = Column(Boolean, default=False)
+    only_experienced = Column(Boolean, default=False)
 
     # Связь с пользователем
     user = relationship("User", back_populates="preferences")
@@ -64,38 +70,66 @@ class Meeting(Base):
     id = Column(Integer, primary_key=True)
     user1_id = Column(Integer, ForeignKey('users.id'))
     user2_id = Column(Integer, ForeignKey('users.id'))
-    scheduled_at = Column(DateTime)
+    scheduled_time = Column(DateTime)
     status = Column(String(20))  # 'pending', 'completed', 'cancelled'
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Связи с пользователями
+    user1 = relationship("User", foreign_keys=[
+                         user1_id], back_populates="meetings_as_user1")
+    user2 = relationship("User", foreign_keys=[
+                         user2_id], back_populates="meetings_as_user2")
+    ratings = relationship("Rating", back_populates="meeting")
 
 
 class Rating(Base):
     __tablename__ = 'ratings'
 
     id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey('meetings.id'))
     from_user_id = Column(Integer, ForeignKey('users.id'))
     to_user_id = Column(Integer, ForeignKey('users.id'))
-    meeting_id = Column(Integer, ForeignKey('meetings.id'))
     rating = Column(Integer)  # 1-5
-    comment = Column(Text)
-    created_at = Column(DateTime, default=datetime.now)
+    comment = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи с пользователями
+    meeting = relationship("Meeting", back_populates="ratings")
     from_user = relationship("User", foreign_keys=[
                              from_user_id], back_populates="ratings_given")
     to_user = relationship("User", foreign_keys=[
                            to_user_id], back_populates="ratings_received")
 
 
+class Chat(Base):
+    """Модель для хранения информации о чатах"""
+    __tablename__ = 'chats'
+
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(BigInteger, unique=True)
+    title = Column(String(100))
+    is_active = Column(Boolean, default=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    # Связи с другими таблицами
+    weekly_polls = relationship("WeeklyPoll", back_populates="chat")
+
+
 class WeeklyPoll(Base):
+    """Модель для хранения еженедельных опросов"""
     __tablename__ = 'weekly_polls'
 
     id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, ForeignKey('chats.id'))
     week_start = Column(DateTime)
     week_end = Column(DateTime)
-    poll_message_id = Column(Integer)
-    status = Column(String(20))  # 'active', 'completed'
-    created_at = Column(DateTime, default=datetime.now)
+    status = Column(String(20))
+    message_id = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Связи с другими таблицами
+    chat = relationship("Chat", back_populates="weekly_polls")
+    responses = relationship("PollResponse", back_populates="poll")
 
 
 class PollResponse(Base):
@@ -105,7 +139,11 @@ class PollResponse(Base):
     poll_id = Column(Integer, ForeignKey('weekly_polls.id'))
     user_id = Column(Integer, ForeignKey('users.id'))
     response = Column(Boolean)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Связи с другими таблицами
+    poll = relationship("WeeklyPoll", back_populates="responses")
+    user = relationship("User", back_populates="poll_responses")
 
 
 def init_db():
