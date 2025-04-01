@@ -367,61 +367,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await query.message.reply_text(profile_text)
         elif query.data == 'settings':
-            # Получаем настройки пользователя
-            user = session.query(User).filter(
-                User.telegram_id == query.from_user.id).first()
-            if not user:
-                await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-                return
-
-            preferences = session.query(UserPreferences).filter(
-                UserPreferences.user_id == user.id).first()
-
-            keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "🏙 Город", callback_data='settings_city'),
-                    InlineKeyboardButton(
-                        "🔗 Соц.сеть", callback_data='settings_social_link')
-                ],
-                [
-                    InlineKeyboardButton(
-                        "ℹ️ О себе", callback_data='settings_about'),
-                    InlineKeyboardButton(
-                        "💼 Работа", callback_data='settings_job')
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📅 Дата рождения", callback_data='settings_birth_date'),
-                    InlineKeyboardButton(
-                        "🖼 Аватар", callback_data='settings_avatar')
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🎯 Хобби", callback_data='settings_hobbies'),
-                    InlineKeyboardButton(
-                        "👁 Видимость", callback_data='settings_visibility')
-                ],
-                [
-                    InlineKeyboardButton(
-                        "◀️ Назад", callback_data='back_to_main')
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            settings_text = (
-                "⚙️ Настройки профиля:\n\n"
-                f"🏙 Город: {user.city or 'Не указан'}\n"
-                f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
-                f"ℹ️ О себе: {user.about or 'Не указано'}\n"
-                f"💼 Работа: {user.job or 'Не указана'}\n"
-                f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
-                f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
-                f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}"
-            )
-
-            await query.message.reply_text(settings_text, reply_markup=reply_markup)
-            return ConversationHandler.END
+            await settings(update, context)
         elif query.data.startswith('set_'):
             # получаем тип настройки (gender, age, language и т.д.)
             setting_type = query.data[4:]
@@ -671,276 +617,100 @@ async def save_pairs_and_create_message(session, pairs, chat_id):
 
 
 async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка изменения настроек"""
+    """Обработка входа в меню настроек"""
     query = update.callback_query
-    setting_type = query.data[4:]
+    await query.answer()
 
-    if setting_type == 'gender':
-        keyboard = [
-            [KeyboardButton("Мужской"), KeyboardButton("Женский")],
-            [KeyboardButton("Любой")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-        await query.message.reply_text("Выберите предпочитаемый пол собеседника:", reply_markup=reply_markup)
-        return SETTINGS_GENDER
-
-    elif setting_type == 'age':
-        await query.message.reply_text("Введите минимальный возраст собеседника (от 18):")
-        return SETTINGS_AGE_MIN
-
-    elif setting_type == 'language':
-        keyboard = [
-            [KeyboardButton("Русский"), KeyboardButton("English")],
-            [KeyboardButton("Русский + English"), KeyboardButton("Любой")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-        await query.message.reply_text("Выберите предпочитаемый язык общения:", reply_markup=reply_markup)
-        return SETTINGS_LANGUAGE
-
-    elif setting_type == 'interests':
-        await query.message.reply_text(
-            "Введите интересующие вас темы через запятую\n"
-            "(например: программирование, спорт, музыка)\n"
-            "или напишите 'Любые':"
-        )
-        return SETTINGS_INTERESTS
-
-    elif setting_type == 'time':
-        keyboard = [
-            [KeyboardButton("Утро"), KeyboardButton("День")],
-            [KeyboardButton("Вечер"), KeyboardButton("Любое время")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-        await query.message.reply_text("Выберите предпочитаемое время для встреч:", reply_markup=reply_markup)
-        return SETTINGS_TIME
-
-
-async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сброс настроек пользователя"""
-    query = update.callback_query
-    user = next(get_session()).query(User).filter(
-        User.telegram_id == query.from_user.id).first()
-    if user:
-        preferences = next(get_session()).query(UserPreferences).filter(
-            UserPreferences.user_id == user.id).first()
-        if preferences:
-            next(get_session()).delete(preferences)
-            next(get_session()).commit()
-            await query.message.reply_text("✅ Настройки успешно сброшены!")
-        else:
-            await query.message.reply_text("ℹ️ У вас пока нет сохраненных настроек.")
-    else:
-        await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-
-
-async def save_gender_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение предпочитаемого пола"""
-    user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                  update.effective_user.id).first()
-    if not user:
-        await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-        return ConversationHandler.END
-
-    preferences = next(get_session()).query(UserPreferences).filter(
-        UserPreferences.user_id == user.id).first()
-    if not preferences:
-        preferences = UserPreferences(user_id=user.id)
-        next(get_session()).add(preferences)
-
-    preferences.preferred_gender = update.message.text
-    next(get_session()).commit()
-
-    await update.message.reply_text(f"✅ Предпочитаемый пол собеседника установлен: {update.message.text}")
-    return ConversationHandler.END
-
-
-async def save_age_min_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение минимального возраста"""
+    session = next(get_session())
     try:
-        age = int(update.message.text)
-        if age < 18 or age > 100:
-            await update.message.reply_text("Пожалуйста, введите корректный возраст (от 18 до 100)")
-            return SETTINGS_AGE_MIN
-
-        context.user_data['min_age'] = age
-        await update.message.reply_text("Теперь введите максимальный возраст собеседника:")
-        return SETTINGS_AGE_MAX
-    except ValueError:
-        await update.message.reply_text("Пожалуйста, введите число")
-        return SETTINGS_AGE_MIN
-
-
-async def save_age_max_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение максимального возраста"""
-    try:
-        age = int(update.message.text)
-        min_age = context.user_data.get('min_age', 18)
-
-        if age < min_age or age > 100:
-            await update.message.reply_text(f"Пожалуйста, введите корректный возраст (от {min_age} до 100)")
-            return SETTINGS_AGE_MAX
-
-        user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                      update.effective_user.id).first()
+        # Проверяем, зарегистрирован ли пользователь
+        user = session.query(User).filter(
+            User.telegram_id == query.from_user.id).first()
         if not user:
-            await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
+            await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
             return ConversationHandler.END
 
-        preferences = next(get_session()).query(UserPreferences).filter(
-            UserPreferences.user_id == user.id).first()
-        if not preferences:
-            preferences = UserPreferences(user_id=user.id)
-            next(get_session()).add(preferences)
+        keyboard = [
+            [
+                InlineKeyboardButton("🏙 Город", callback_data='settings_city'),
+                InlineKeyboardButton(
+                    "🔗 Соц.сеть", callback_data='settings_social_link')
+            ],
+            [
+                InlineKeyboardButton(
+                    "ℹ️ О себе", callback_data='settings_about'),
+                InlineKeyboardButton("💼 Работа", callback_data='settings_job')
+            ],
+            [
+                InlineKeyboardButton(
+                    "📅 Дата рождения", callback_data='settings_birth_date'),
+                InlineKeyboardButton(
+                    "🖼 Аватар", callback_data='settings_avatar')
+            ],
+            [
+                InlineKeyboardButton(
+                    "🎯 Хобби", callback_data='settings_hobbies'),
+                InlineKeyboardButton(
+                    "👁 Видимость", callback_data='settings_visibility')
+            ],
+            [InlineKeyboardButton("◀️ Назад", callback_data='back_to_main')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-        preferences.age_range_min = min_age
-        preferences.age_range_max = age
-        next(get_session()).commit()
-
-        await update.message.reply_text(
-            f"✅ Возрастной диапазон собеседников установлен: {min_age}-{age} лет"
-        )
-        return ConversationHandler.END
-    except ValueError:
-        await update.message.reply_text("Пожалуйста, введите число")
-        return SETTINGS_AGE_MAX
-
-
-async def save_language_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение предпочитаемого языка"""
-    user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                  update.effective_user.id).first()
-    if not user:
-        await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-        return ConversationHandler.END
-
-    preferences = next(get_session()).query(UserPreferences).filter(
-        UserPreferences.user_id == user.id).first()
-    if not preferences:
-        preferences = UserPreferences(user_id=user.id)
-        next(get_session()).add(preferences)
-
-    preferences.preferred_languages = update.message.text
-    next(get_session()).commit()
-
-    await update.message.reply_text(f"✅ Предпочитаемый язык общения установлен: {update.message.text}")
-    return ConversationHandler.END
-
-
-async def save_interests_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение предпочитаемых интересов"""
-    user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                  update.effective_user.id).first()
-    if not user:
-        await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-        return ConversationHandler.END
-
-    preferences = next(get_session()).query(UserPreferences).filter(
-        UserPreferences.user_id == user.id).first()
-    if not preferences:
-        preferences = UserPreferences(user_id=user.id)
-        next(get_session()).add(preferences)
-
-    preferences.preferred_interests = update.message.text
-    next(get_session()).commit()
-
-    await update.message.reply_text(f"✅ Предпочитаемые интересы установлены: {update.message.text}")
-    return ConversationHandler.END
-
-
-async def save_time_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение предпочитаемого времени"""
-    user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                  update.effective_user.id).first()
-    if not user:
-        await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-        return ConversationHandler.END
-
-    preferences = next(get_session()).query(UserPreferences).filter(
-        UserPreferences.user_id == user.id).first()
-    if not preferences:
-        preferences = UserPreferences(user_id=user.id)
-        next(get_session()).add(preferences)
-
-    preferences.preferred_meeting_times = update.message.text
-    next(get_session()).commit()
-
-    await update.message.reply_text(f"✅ Предпочитаемое время встреч установлено: {update.message.text}")
-    return ConversationHandler.END
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет сообщение с помощью"""
-    help_text = (
-        "🤖 Команды бота:\n\n"
-        "/start - Начать работу с ботом\n"
-        "/help - Показать это сообщение\n"
-        "/stats - Показать вашу статистику\n\n"
-        "ℹ️ Как это работает:\n"
-        "1. Зарегистрируйтесь, нажав кнопку 'Регистрация'\n"
-        "2. Настройте предпочтения в разделе 'Настройки'\n"
-        "3. Каждую пятницу бот создает опрос для участия\n"
-        "4. В понедельник формируются пары для встреч\n"
-        "5. После встречи не забудьте оставить отзыв\n\n"
-        "📅 Расписание:\n"
-        "- Пятница 18:00 - Опрос на следующую неделю\n"
-        "- Понедельник 10:00 - Формирование пар\n\n"
-        "❓ Если у вас есть вопросы, нажмите кнопку FAQ"
-    )
-    await update.message.reply_text(help_text)
-
-
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет статистику пользователя"""
-    user = next(get_session()).query(User).filter(User.telegram_id ==
-                                                  update.effective_user.id).first()
-    if user:
-        # Получаем все встречи пользователя
-        total_meetings = len(user.meetings_as_user1) + \
-            len(user.meetings_as_user2)
-        completed_meetings = next(get_session()).query(Meeting).filter(
-            ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
-            (Meeting.status == 'completed')
-        ).count()
-
-        # Получаем средний рейтинг
-        ratings = next(get_session()).query(Rating).filter(
-            Rating.to_user_id == user.id).all()
-        avg_rating = sum([r.rating for r in ratings]) / \
-            len(ratings) if ratings else 0
-
-        # Определяем уровень опыта
-        experience_level = "🌱 Новичок"
-        if total_meetings >= 10:
-            experience_level = "🌿 Регуляр"
-        if total_meetings >= 20:
-            experience_level = "🌳 Эксперт"
-
-        stats_text = (
-            "📊 Ваша статистика:\n\n"
-            f"👥 Всего встреч: {total_meetings}\n"
-            f"✅ Завершённых встреч: {completed_meetings}\n"
-            f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
-            f"📈 Уровень опыта: {experience_level}\n"
-            f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
-            "🏆 Достижения:\n"
+        settings_text = (
+            "⚙️ Настройки профиля:\n\n"
+            f"🏙 Город: {user.city or 'Не указан'}\n"
+            f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
+            f"ℹ️ О себе: {user.about or 'Не указано'}\n"
+            f"💼 Работа: {user.job or 'Не указана'}\n"
+            f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
+            f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
+            f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}"
         )
 
-        # Добавляем достижения
-        if total_meetings >= 1:
-            stats_text += "🎯 Первая встреча\n"
-        if total_meetings >= 5:
-            stats_text += "🔥 5 встреч\n"
-        if total_meetings >= 10:
-            stats_text += "💫 10 встреч\n"
-        if total_meetings >= 20:
-            stats_text += "🌟 20 встреч\n"
-        if avg_rating >= 4.5:
-            stats_text += "⭐️ Отличный собеседник\n"
+        await query.message.reply_text(settings_text, reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in settings: {e}")
+        await query.message.reply_text("Произошла ошибка при открытии настроек.")
+        return ConversationHandler.END
+    finally:
+        session.close()
 
-    else:
-        stats_text = "📊 Статистика:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
 
-    await update.message.reply_text(stats_text)
+async def update_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление видимости профиля"""
+    query = update.callback_query
+    await query.answer()
+
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == query.from_user.id).first()
+        if not user:
+            await query.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        visibility = query.data.split('_')[1]  # 'public' или 'private'
+        user.is_visible = (visibility == 'public')
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        visibility_text = "Публичный" if user.is_visible else "Приватный"
+        await query.message.reply_text(
+            f"✅ Видимость профиля изменена на: {visibility_text}",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_visibility: {e}")
+        await query.message.reply_text("Произошла ошибка при обновлении видимости профиля.")
+        return ConversationHandler.END
+    finally:
+        session.close()
 
 
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
