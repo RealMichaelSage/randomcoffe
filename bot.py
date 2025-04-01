@@ -1196,7 +1196,8 @@ def main():
             ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
         },
         fallbacks=[CommandHandler('cancel', start)],
-        per_chat=True
+        per_chat=True,
+        per_user=True
     )
 
     # Создаем обработчик разговора для настроек
@@ -1211,7 +1212,8 @@ def main():
             SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
         },
         fallbacks=[CommandHandler('cancel', start)],
-        per_chat=True
+        per_chat=True,
+        per_user=True
     )
 
     # Добавляем обработчики
@@ -1224,8 +1226,10 @@ def main():
     application.add_handler(settings_handler)
 
     # Добавляем обработчики для отслеживания изменений в чате
-    application.add_handler(ChatMemberHandler(handle_new_chat_member))
-    application.add_handler(ChatMemberHandler(handle_left_chat_member))
+    application.add_handler(ChatMemberHandler(
+        handle_new_chat_member, filters.ChatMember.NEW_CHAT_MEMBERS))
+    application.add_handler(ChatMemberHandler(
+        handle_left_chat_member, filters.ChatMember.LEFT_CHAT_MEMBERS))
 
     # Добавляем обработчик ответов на опросы
     application.add_handler(PollAnswerHandler(handle_poll_answer))
