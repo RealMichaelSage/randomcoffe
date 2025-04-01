@@ -676,6 +676,175 @@ async def save_time_preference(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет сообщение с помощью"""
+    help_text = (
+        "🤖 Команды бота:\n\n"
+        "/start - Начать работу с ботом\n"
+        "/help - Показать это сообщение\n"
+        "/stats - Показать вашу статистику\n\n"
+        "ℹ️ Как это работает:\n"
+        "1. Зарегистрируйтесь, нажав кнопку 'Регистрация'\n"
+        "2. Настройте предпочтения в разделе 'Настройки'\n"
+        "3. Каждую пятницу бот создает опрос для участия\n"
+        "4. В понедельник формируются пары для встреч\n"
+        "5. После встречи не забудьте оставить отзыв\n\n"
+        "📅 Расписание:\n"
+        "- Пятница 18:00 - Опрос на следующую неделю\n"
+        "- Понедельник 10:00 - Формирование пар\n\n"
+        "❓ Если у вас есть вопросы, нажмите кнопку FAQ"
+    )
+    await update.message.reply_text(help_text)
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет статистику пользователя"""
+    user = db.query(User).filter(User.telegram_id ==
+                                 update.effective_user.id).first()
+    if user:
+        # Получаем все встречи пользователя
+        total_meetings = len(user.meetings_as_user1) + \
+            len(user.meetings_as_user2)
+        completed_meetings = db.query(Meeting).filter(
+            ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
+            (Meeting.status == 'completed')
+        ).count()
+
+        # Получаем средний рейтинг
+        ratings = db.query(Rating).filter(
+            Rating.rated_user_id == user.id).all()
+        avg_rating = sum([r.rating for r in ratings]) / \
+            len(ratings) if ratings else 0
+
+        # Определяем уровень опыта
+        experience_level = "🌱 Новичок"
+        if total_meetings >= 10:
+            experience_level = "🌿 Регуляр"
+        if total_meetings >= 20:
+            experience_level = "🌳 Эксперт"
+
+        stats_text = (
+            "📊 Ваша статистика:\n\n"
+            f"👥 Всего встреч: {total_meetings}\n"
+            f"✅ Завершённых встреч: {completed_meetings}\n"
+            f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
+            f"📈 Уровень опыта: {experience_level}\n"
+            f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
+            "🏆 Достижения:\n"
+        )
+
+        # Добавляем достижения
+        if total_meetings >= 1:
+            stats_text += "🎯 Первая встреча\n"
+        if total_meetings >= 5:
+            stats_text += "🔥 5 встреч\n"
+        if total_meetings >= 10:
+            stats_text += "💫 10 встреч\n"
+        if total_meetings >= 20:
+            stats_text += "🌟 20 встреч\n"
+        if avg_rating >= 4.5:
+            stats_text += "⭐️ Отличный собеседник\n"
+
+    else:
+        stats_text = "📊 Статистика:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
+
+    await update.message.reply_text(stats_text)
+
+
+def get_next_monday(hour=10, minute=0):
+    """Возвращает дату следующего понедельника"""
+    now = datetime.now()
+    days_ahead = 7 - now.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    next_monday = now + timedelta(days=days_ahead)
+    return next_monday.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет еженедельный опрос"""
+    poll = WeeklyPoll(
+        created_at=datetime.now(),
+        status='active'
+    )
+    db.add(poll)
+    db.commit()
+
+    message = await context.bot.send_poll(
+        chat_id=GROUP_CHAT_ID,
+        question="Привет! Будете участвовать во встречах Random Coffee на следующей неделе? ☕️",
+        options=["Да", "Нет"],
+        is_anonymous=False
+    )
+
+    poll.message_id = message.message_id
+    db.commit()
+
+
+async def create_pairs(context: ContextTypes.DEFAULT_TYPE):
+    """Создает пары для встреч"""
+    # Получаем активный опрос
+    poll = db.query(WeeklyPoll).filter(
+        WeeklyPoll.status == 'active'
+    ).first()
+
+    if not poll:
+        return
+
+    # Получаем положительные ответы
+    positive_responses = db.query(PollResponse).filter(
+        PollResponse.poll_id == poll.id,
+        PollResponse.response == True
+    ).all()
+
+    # Получаем пользователей
+    user_ids = [response.user_id for response in positive_responses]
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+
+    # Перемешиваем пользователей
+    random.shuffle(users)
+
+    # Формируем пары
+    pairs = []
+    for i in range(0, len(users)-1, 2):
+        pairs.append((users[i], users[i+1]))
+
+    # Если есть нечетное количество участников
+    if len(users) % 2 != 0 and users:
+        pairs.append((users[-1], None))
+
+    # Отправляем сообщение с парами
+    pairs_text = "🎉 Пары для встреч на этой неделе:\n\n"
+
+    for user1, user2 in pairs:
+        if user2:
+            pairs_text += f"👥 {user1.nickname} ↔️ {user2.nickname}\n"
+        else:
+            pairs_text += f"👤 {user1.nickname} (без пары на этой неделе)\n"
+
+    pairs_text += "\n✉️ Напишите своему собеседнику в личку, чтобы договориться о встрече!"
+
+    await context.bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text=pairs_text
+    )
+
+    # Создаем встречи в базе данных
+    for user1, user2 in pairs:
+        if user2:  # Создаем встречу только если есть второй участник
+            meeting = Meeting(
+                user1_id=user1.id,
+                user2_id=user2.id,
+                status='active',
+                created_at=datetime.now()
+            )
+            db.add(meeting)
+
+    # Завершаем опрос
+    poll.status = 'completed'
+    db.commit()
+
+
 def main():
     """Запуск бота"""
     # Создаем приложение
