@@ -3,8 +3,8 @@ import logging
 import random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, Bot, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, Bot, ReplyKeyboardMarkup, KeyboardButton, ChatMemberUpdated
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler, ChatMemberHandler, PollAnswerHandler
 from database import init_db, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse
 
 # Загружаем переменные окружения из файла .env, если он существует
@@ -781,68 +781,195 @@ async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
     db.commit()
 
 
-async def create_pairs(context: ContextTypes.DEFAULT_TYPE):
-    """Создает пары для встреч"""
-    # Получаем активный опрос
-    poll = db.query(WeeklyPoll).filter(
-        WeeklyPoll.status == 'active'
-    ).first()
+async def create_pairs(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Создание пар для встреч"""
+    chat_id = GROUP_CHAT_ID
+    db = next(get_db())
 
-    if not poll:
+    # Получаем последний опрос
+    latest_poll = db.query(WeeklyPoll).order_by(
+        WeeklyPoll.created_at.desc()).first()
+    if not latest_poll:
         return
 
-    # Получаем положительные ответы
-    positive_responses = db.query(PollResponse).filter(
-        PollResponse.poll_id == poll.id,
-        PollResponse.response == True
-    ).all()
-
-    # Получаем пользователей
-    user_ids = [response.user_id for response in positive_responses]
-    users = db.query(User).filter(User.id.in_(user_ids)).all()
-
-    # Перемешиваем пользователей
-    random.shuffle(users)
-
-    # Формируем пары
-    pairs = []
-    for i in range(0, len(users)-1, 2):
-        pairs.append((users[i], users[i+1]))
-
-    # Если есть нечетное количество участников
-    if len(users) % 2 != 0 and users:
-        pairs.append((users[-1], None))
-
-    # Отправляем сообщение с парами
-    pairs_text = "🎉 Пары для встреч на этой неделе:\n\n"
-
-    for user1, user2 in pairs:
-        if user2:
-            pairs_text += f"👥 {user1.nickname} ↔️ {user2.nickname}\n"
-        else:
-            pairs_text += f"👤 {user1.nickname} (без пары на этой неделе)\n"
-
-    pairs_text += "\n✉️ Напишите своему собеседнику в личку, чтобы договориться о встрече!"
-
-    await context.bot.send_message(
-        chat_id=GROUP_CHAT_ID,
-        text=pairs_text
+    # Получаем пользователей, которые ответили "Да"
+    positive_responses = (
+        db.query(PollResponse)
+        .filter(PollResponse.poll_id == latest_poll.id)
+        .filter(PollResponse.response == "Да")
+        .all()
     )
 
-    # Создаем встречи в базе данных
-    for user1, user2 in pairs:
-        if user2:  # Создаем встречу только если есть второй участник
+    # Получаем ID пользователей, готовых к встрече
+    available_users = [response.user_id for response in positive_responses]
+
+    if len(available_users) < 2:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="К сожалению, недостаточно участников для формирования пар на эту неделю 😔"
+        )
+        return
+
+    # Получаем историю встреч
+    past_meetings = (
+        db.query(Meeting)
+        .filter(Meeting.user1_id.in_(available_users))
+        .filter(Meeting.user2_id.in_(available_users))
+        .all()
+    )
+
+    # Создаем словарь прошлых встреч
+    meeting_history = {}
+    for meeting in past_meetings:
+        if meeting.user1_id not in meeting_history:
+            meeting_history[meeting.user1_id] = set()
+        if meeting.user2_id not in meeting_history:
+            meeting_history[meeting.user2_id] = set()
+        meeting_history[meeting.user1_id].add(meeting.user2_id)
+        meeting_history[meeting.user2_id].add(meeting.user1_id)
+
+    # Перемешиваем список пользователей
+    random.shuffle(available_users)
+
+    # Создаем пары с учетом истории встреч
+    pairs = []
+    unpaired = []
+    used = set()
+
+    for user1 in available_users:
+        if user1 in used:
+            continue
+
+        # Ищем подходящего партнера
+        best_partner = None
+        min_meetings = float('inf')
+
+        for user2 in available_users:
+            if user2 == user1 or user2 in used:
+                continue
+
+            # Проверяем историю встреч
+            meetings_count = len(meeting_history.get(
+                user1, set()).intersection({user2}))
+
+            if meetings_count < min_meetings:
+                min_meetings = meetings_count
+                best_partner = user2
+
+            # Если нашли пользователя, с которым встреч не было, сразу берем его
+            if meetings_count == 0:
+                break
+
+        if best_partner:
+            pairs.append((user1, best_partner))
+            used.add(user1)
+            used.add(best_partner)
+        else:
+            unpaired.append(user1)
+
+    # Если остались непарные пользователи, добавляем их к последней паре или создаем новую
+    if unpaired:
+        if pairs:
+            last_pair = pairs[-1]
+            pairs[-1] = (last_pair[0], last_pair[1], unpaired[0])
+        else:
+            # Если пар нет совсем, создаем одну из оставшихся
+            pairs.append(tuple(unpaired))
+
+    # Сохраняем пары в базу данных и отправляем сообщение
+    message = "🎉 Пары для встреч на следующую неделю:\n\n"
+
+    for pair in pairs:
+        # Получаем информацию о пользователях
+        users = []
+        for user_id in pair:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            if user:
+                users.append(
+                    f"@{user.username}" if user.username else f"[Пользователь](tg://user?id={user_id})")
+
+        # Добавляем пару в сообщение
+        message += "👥 " + " и ".join(users) + "\n"
+
+        # Сохраняем встречу в базу данных
+        if len(pair) == 2:
             meeting = Meeting(
-                user1_id=user1.id,
-                user2_id=user2.id,
-                status='active',
-                created_at=datetime.now()
+                user1_id=pair[0],
+                user2_id=pair[1],
+                week_number=datetime.now().isocalendar()[1]
             )
             db.add(meeting)
+        elif len(pair) == 3:
+            meeting1 = Meeting(
+                user1_id=pair[0],
+                user2_id=pair[1],
+                week_number=datetime.now().isocalendar()[1]
+            )
+            meeting2 = Meeting(
+                user1_id=pair[1],
+                user2_id=pair[2],
+                week_number=datetime.now().isocalendar()[1]
+            )
+            meeting3 = Meeting(
+                user1_id=pair[0],
+                user2_id=pair[2],
+                week_number=datetime.now().isocalendar()[1]
+            )
+            db.add(meeting1)
+            db.add(meeting2)
+            db.add(meeting3)
 
-    # Завершаем опрос
-    poll.status = 'completed'
+    message += "\nПожалуйста, договоритесь о времени и формате встречи в личных сообщениях 😊"
+
+    # Сохраняем изменения в базе данных
     db.commit()
+
+    # Отправляем сообщение в чат
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=message,
+        parse_mode='Markdown'
+    )
+
+
+async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка добавления бота в новый чат"""
+    if update.my_chat_member and update.my_chat_member.new_chat_member.user.id == context.bot.id:
+        chat_name = update.effective_chat.title
+        welcome_message = (
+            f"Здравствуйте!\n"
+            f"Я — рандом кофе бот, который теперь живёт в бесплатном сообществе {chat_name}. "
+            f"Моя задача — помочь вам познакомиться и узнать друг друга поближе.\n\n"
+            f"Как это работает?\n"
+            f"В конце каждой недели я буду спрашивать вас, готовы ли вы встретиться на следующей неделе. "
+            f"Пока пары не сформированы, вы можете передумать.\n\n"
+            f"Чтобы изменить своё решение, нажмите на опрос (для этого нужно щёлкнуть правой кнопкой мыши "
+            f"на рабочем столе Telegram) и выберите «отменить голосование». "
+            f"Затем вы можете выбрать новый вариант.\n\n"
+            f"В понедельник я составлю пары из всех зарегистрировавшихся и отправлю список в этот чат.\n\n"
+            f"Вы можете выбрать день, время и формат встречи. Просто напишите своему партнёру в личные сообщения, "
+            f"когда и в каком формате вам удобно встретиться.\n\n"
+            f"Пары формируются случайным образом, но вы можете помочь мне улучшить подбор."
+        )
+
+        # Отправляем приветственное сообщение
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=welcome_message
+        )
+
+        # Отправляем первичный опрос
+        await send_initial_poll(update.effective_chat.id, context)
+
+
+async def send_initial_poll(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправка первичного опроса об интересе к встречам"""
+    await context.bot.send_poll(
+        chat_id=chat_id,
+        question="Тебе интересна идея встреч в этом чате?",
+        options=["Да", "Нет", "Пока что не знаю"],
+        is_anonymous=False
+    )
 
 
 def main():
@@ -888,16 +1015,28 @@ def main():
     application.add_handler(conv_handler)
     application.add_handler(settings_handler)
 
+    # Добавляем обработчик добавления бота в чат
+    application.add_handler(ChatMemberHandler(
+        handle_new_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+
+    # Добавляем обработчик ответов на опросы
+    application.add_handler(PollAnswerHandler(handle_poll_answer))
+
     # Настраиваем отправку еженедельных опросов
-    job_queue = application.job_queue
-    if job_queue:
+    if application.job_queue:
         # Отправляем опрос каждый понедельник в 10:00
-        job_queue.run_repeating(send_weekly_poll, interval=timedelta(days=7),
-                                first=get_next_monday())
+        application.job_queue.run_repeating(
+            send_weekly_poll,
+            interval=timedelta(days=7),
+            first=get_next_monday()
+        )
 
         # Отправляем результаты и создаем пары каждый понедельник в 17:00
-        job_queue.run_repeating(create_pairs, interval=timedelta(days=7),
-                                first=get_next_monday(hour=17))
+        application.job_queue.run_repeating(
+            create_pairs,
+            interval=timedelta(days=7),
+            first=get_next_monday(hour=17)
+        )
 
     # Запускаем бота
     print("Бот запускается...")
