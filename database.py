@@ -86,22 +86,23 @@ class Meeting(Base):
 
 
 class Rating(Base):
+    """Модель рейтинга"""
     __tablename__ = 'ratings'
 
     id = Column(Integer, primary_key=True)
     meeting_id = Column(Integer, ForeignKey('meetings.id'), nullable=False)
-    rater_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    rated_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    from_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    to_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     rating = Column(Float)
     comment = Column(String(500))
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Связи с пользователями
+    # Отношения
     meeting = relationship("Meeting", back_populates="ratings")
     from_user = relationship("User", foreign_keys=[
-                             rater_user_id], back_populates="ratings_given")
+                             from_user_id], back_populates="ratings_given")
     to_user = relationship("User", foreign_keys=[
-                           rated_user_id], back_populates="ratings_received")
+                           to_user_id], back_populates="ratings_received")
 
 
 class Chat(Base):

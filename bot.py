@@ -417,7 +417,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # Получаем средний рейтинг
                 ratings = session.query(Rating).filter(
-                    Rating.rated_user_id == user.id).all()
+                    Rating.to_user_id == user.id).all()
                 avg_rating = sum([r.rating for r in ratings]) / \
                     len(ratings) if ratings else 0
 
@@ -895,7 +895,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Получаем средний рейтинг
         ratings = next(get_session()).query(Rating).filter(
-            Rating.rated_user_id == user.id).all()
+            Rating.to_user_id == user.id).all()
         avg_rating = sum([r.rating for r in ratings]) / \
             len(ratings) if ratings else 0
 
