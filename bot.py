@@ -353,12 +353,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 profile_text = (
                     "👤 Ваш профиль:\n\n"
                     f"👤 Имя: {user.nickname}\n"
-                    f"📅 Возраст: {user.age}\n"
-                    f"⚧ Пол: {user.gender}\n"
-                    f"💼 Профессия: {user.profession}\n"
-                    f"🎯 Интересы: {user.interests}\n"
-                    f"🗣 Язык общения: {user.language}\n"
-                    f"🕒 Удобное время: {user.meeting_time}\n"
+                    f"🏙 Город: {user.city or 'Не указан'}\n"
+                    f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
+                    f"ℹ️ О себе: {user.about or 'Не указано'}\n"
+                    f"💼 Работа: {user.job or 'Не указана'}\n"
+                    f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
+                    f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
+                    f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}\n"
                     f"📆 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
                 )
             else:
@@ -562,132 +563,111 @@ async def distribute_pairs(context: ContextTypes.DEFAULT_TYPE):
             # Создаем словарь прошлых встреч
             meeting_history = {}
             for meeting in past_meetings:
-                if meeting.user1_id not in meeting_history:
-                    meeting_history[meeting.user1_id] = set()
-                if meeting.user2_id not in meeting_history:
-                    meeting_history[meeting.user2_id] = set()
-                meeting_history[meeting.user1_id].add(meeting.user2_id)
-                meeting_history[meeting.user2_id].add(meeting.user1_id)
+                for user_id in [meeting.user1_id, meeting.user2_id]:
+                    if user_id not in meeting_history:
+                        meeting_history[user_id] = set()
+                    meeting_history[user_id].add(
+                        meeting.user2_id if user_id == meeting.user1_id else meeting.user1_id)
 
-            # Перемешиваем список пользователей
-            random.shuffle(user_ids)
+            # Создаем пары
+            pairs = create_pairs(user_ids, meeting_history)
 
-            # Создаем пары с учетом истории встреч
-            pairs = []
-            unpaired = []
-            used = set()
+            # Сохраняем пары и формируем сообщение
+            message = await save_pairs_and_create_message(session, pairs, chat.chat_id)
+            await context.bot.send_message(chat_id=chat.chat_id, text=message, parse_mode='Markdown')
 
-            for user1 in user_ids:
-                if user1 in used:
-                    continue
-
-                # Ищем подходящего партнера
-                best_partner = None
-                min_meetings = float('inf')
-
-                for user2 in user_ids:
-                    if user2 == user1 or user2 in used:
-                        continue
-
-                    # Проверяем историю встреч
-                    meetings_count = len(meeting_history.get(
-                        user1, set()).intersection({user2}))
-
-                    if meetings_count < min_meetings:
-                        min_meetings = meetings_count
-                        best_partner = user2
-
-                    # Если нашли пользователя, с которым встреч не было, сразу берем его
-                    if meetings_count == 0:
-                        break
-
-                if best_partner:
-                    pairs.append((user1, best_partner))
-                    used.add(user1)
-                    used.add(best_partner)
-                else:
-                    unpaired.append(user1)
-
-            # Если остались непарные пользователи, добавляем их к последней паре или создаем новую
-            if unpaired:
-                if pairs:
-                    last_pair = pairs[-1]
-                    pairs[-1] = (last_pair[0], last_pair[1], unpaired[0])
-                else:
-                    # Если пар нет совсем, создаем одну из оставшихся
-                    pairs.append(tuple(unpaired))
-
-            # Сохраняем пары в базу данных и отправляем сообщение
-            message = "🎉 Пары для встреч на следующую неделю:\n\n"
-
-            for pair in pairs:
-                # Получаем информацию о пользователях
-                users = []
-                for user_id in pair:
-                    user = session.query(User).filter_by(id=user_id).first()
-                    if user:
-                        if user.username:
-                            users.append(f"@{user.username}")
-                        else:
-                            users.append(
-                                f"[Пользователь](tg://user?id={user.telegram_id})")
-
-                # Добавляем пару в сообщение
-                message += "👥 " + " и ".join(users) + "\n"
-
-                # Сохраняем встречу в базу данных
-                if len(pair) == 2:
-                    user1, user2 = pair
-                    meeting = Meeting(
-                        user1_id=user1,
-                        user2_id=user2,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(meeting)
-                elif len(pair) == 3:
-                    user1, user2, user3 = pair
-                    meeting1 = Meeting(
-                        user1_id=user1,
-                        user2_id=user2,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    meeting2 = Meeting(
-                        user1_id=user2,
-                        user2_id=user3,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    meeting3 = Meeting(
-                        user1_id=user1,
-                        user2_id=user3,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(meeting1)
-                    session.add(meeting2)
-                    session.add(meeting3)
-
-            message += "\nПожалуйста, договоритесь о времени и формате встречи в личных сообщениях 😊"
-
-            # Сохраняем изменения в базе данных
-            session.commit()
-
-            # Отправляем сообщение в конкретный чат
-            await context.bot.send_message(
-                chat_id=chat.chat_id,
-                text=message,
-                parse_mode='Markdown'
-            )
     except Exception as e:
         logger.error(f"Error creating pairs for chat: {e}")
     finally:
         session.close()
+
+
+def create_pairs(user_ids, meeting_history):
+    """Создает пары пользователей с учетом истории встреч"""
+    random.shuffle(user_ids)
+    pairs = []
+    unpaired = []
+    used = set()
+
+    for user1 in user_ids:
+        if user1 in used:
+            continue
+
+        # Ищем подходящего партнера
+        best_partner = None
+        min_meetings = float('inf')
+
+        for user2 in user_ids:
+            if user2 == user1 or user2 in used:
+                continue
+
+            meetings_count = len(meeting_history.get(
+                user1, set()).intersection({user2}))
+            if meetings_count < min_meetings:
+                min_meetings = meetings_count
+                best_partner = user2
+            if meetings_count == 0:
+                break
+
+        if best_partner:
+            pairs.append((user1, best_partner))
+            used.add(user1)
+            used.add(best_partner)
+        else:
+            unpaired.append(user1)
+
+    # Обрабатываем непарных пользователей
+    if unpaired:
+        if pairs:
+            last_pair = list(pairs[-1])
+            last_pair.extend(unpaired)
+            pairs[-1] = tuple(last_pair)
+        else:
+            pairs.append(tuple(unpaired))
+
+    return pairs
+
+
+async def save_pairs_and_create_message(session, pairs, chat_id):
+    """Сохраняет пары в базу данных и создает сообщение"""
+    message = "🎉 Пары для встреч на следующую неделю:\n\n"
+
+    for pair in pairs:
+        # Получаем информацию о пользователях
+        users = []
+        for user_id in pair:
+            user = session.query(User).filter_by(id=user_id).first()
+            if user:
+                users.append(
+                    f"@{user.username}" if user.username else f"[Пользователь](tg://user?id={user.telegram_id})")
+
+        # Добавляем пару в сообщение
+        message += "👥 " + " и ".join(users) + "\n"
+
+        # Сохраняем встречи в базу данных
+        if len(pair) == 2:
+            user1, user2 = pair
+            session.add(Meeting(
+                user1_id=user1,
+                user2_id=user2,
+                scheduled_time=datetime.utcnow(),
+                status='scheduled',
+                created_at=datetime.utcnow()
+            ))
+        elif len(pair) >= 3:
+            for i in range(len(pair)):
+                for j in range(i + 1, len(pair)):
+                    session.add(Meeting(
+                        user1_id=pair[i],
+                        user2_id=pair[j],
+                        scheduled_time=datetime.utcnow(),
+                        status='scheduled',
+                        created_at=datetime.utcnow()
+                    ))
+
+    message += "\nПожалуйста, договоритесь о времени и формате встречи в личных сообщениях 😊"
+    session.commit()
+    return message
 
 
 async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -966,61 +946,59 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка ответов на опросы"""
     answer = update.poll_answer
-    user_id = answer.user.id
-    poll_id = answer.poll_id
+    session = next(get_session())
+    try:
+        # Получаем пользователя и опрос
+        user = session.query(User).filter(
+            User.telegram_id == answer.user.id).first()
+        poll = session.query(WeeklyPoll).filter(
+            WeeklyPoll.message_id == answer.poll_id).first()
 
-    # Получаем последний опрос из базы данных
-    poll = next(get_session()).query(WeeklyPoll).filter(
-        WeeklyPoll.message_id == poll_id).first()
-    if not poll:
-        return
+        if not user or not poll:
+            logger.warning(
+                f"User or poll not found: user_id={answer.user.id}, poll_id={answer.poll_id}")
+            return
 
-    # Получаем выбранный вариант ответа
-    selected_option = answer.option_ids[0] if answer.option_ids else None
-    if selected_option is None:
-        return
+        # Получаем выбранный вариант ответа
+        selected_option = answer.option_ids[0] if answer.option_ids else None
+        if selected_option is None:
+            return
 
-    # Преобразуем индекс варианта в текст ответа
-    response_text = ["Да", "Нет", "Пока что не знаю"][selected_option]
+        response_text = ["Да", "Нет"][selected_option]
 
-    # Сохраняем ответ в базу данных
-    poll_response = PollResponse(
-        poll_id=poll.id,
-        user_id=user_id,
-        response=response_text,
-        created_at=datetime.now()
-    )
+        # Обновляем или создаем ответ
+        existing_response = session.query(PollResponse).filter(
+            PollResponse.poll_id == poll.id,
+            PollResponse.user_id == user.id
+        ).first()
 
-    # Проверяем, существует ли уже ответ от этого пользователя
-    existing_response = next(get_session()).query(PollResponse).filter(
-        PollResponse.poll_id == poll.id,
-        PollResponse.user_id == user_id
-    ).first()
+        if existing_response:
+            existing_response.response = response_text
+            existing_response.created_at = datetime.utcnow()
+        else:
+            session.add(PollResponse(
+                poll_id=poll.id,
+                user_id=user.id,
+                response=response_text,
+                created_at=datetime.utcnow()
+            ))
 
-    if existing_response:
-        # Обновляем существующий ответ
-        existing_response.response = response_text
-        existing_response.created_at = datetime.now()
-    else:
-        # Добавляем новый ответ
-        next(get_session()).add(poll_response)
+        session.commit()
 
-    next(get_session()).commit()
-
-    # Если это первичный опрос и пользователь ответил "Да",
-    # предлагаем ему зарегистрироваться
-    if poll.status == 'initial' and response_text == "Да":
-        keyboard = [
-            [InlineKeyboardButton("👤 Регистрация", callback_data='register')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
-                 "Нажмите кнопку ниже, чтобы начать регистрацию:",
-            reply_markup=reply_markup
-        )
+        # Если это первичный опрос и пользователь ответил "Да", предлагаем регистрацию
+        if poll.status == 'initial' and response_text == "Да":
+            keyboard = [[InlineKeyboardButton(
+                "👤 Регистрация", callback_data='register')]]
+            await context.bot.send_message(
+                chat_id=user.telegram_id,
+                text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
+                     "Нажмите кнопку ниже, чтобы начать регистрацию:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+    except Exception as e:
+        logger.error(f"Error in handle_poll_answer: {e}")
+    finally:
+        session.close()
 
 
 def get_next_monday(hour=10, minute=0):
@@ -1123,8 +1101,10 @@ async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
             # Если остались непарные пользователи, добавляем их к последней паре или создаем новую
             if unpaired:
                 if pairs:
-                    last_pair = pairs[-1]
-                    pairs[-1] = (last_pair[0], last_pair[1], unpaired[0])
+                    # Если есть хотя бы одна пара, добавляем непарных к последней паре
+                    last_pair = list(pairs[-1])
+                    last_pair.extend(unpaired)
+                    pairs[-1] = tuple(last_pair)
                 else:
                     # Если пар нет совсем, создаем одну из оставшихся
                     pairs.append(tuple(unpaired))
@@ -1136,11 +1116,13 @@ async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
                 # Получаем информацию о пользователях
                 users = []
                 for user_id in pair:
-                    user = session.query(User).filter_by(
-                        telegram_id=user_id).first()
+                    user = session.query(User).filter_by(id=user_id).first()
                     if user:
-                        users.append(
-                            f"@{user.username}" if user.username else f"[Пользователь](tg://user?id={user_id})")
+                        if user.username:
+                            users.append(f"@{user.username}")
+                        else:
+                            users.append(
+                                f"[Пользователь](tg://user?id={user.telegram_id})")
 
                 # Добавляем пару в сообщение
                 message += "👥 " + " и ".join(users) + "\n"
@@ -1156,32 +1138,18 @@ async def send_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
                         created_at=datetime.utcnow()
                     )
                     session.add(meeting)
-                elif len(pair) == 3:
-                    user1, user2, user3 = pair
-                    meeting1 = Meeting(
-                        user1_id=user1,
-                        user2_id=user2,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    meeting2 = Meeting(
-                        user1_id=user2,
-                        user2_id=user3,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    meeting3 = Meeting(
-                        user1_id=user1,
-                        user2_id=user3,
-                        scheduled_time=datetime.utcnow(),
-                        status='scheduled',
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(meeting1)
-                    session.add(meeting2)
-                    session.add(meeting3)
+                elif len(pair) >= 3:
+                    # Создаем встречи между всеми участниками группы
+                    for i in range(len(pair)):
+                        for j in range(i + 1, len(pair)):
+                            meeting = Meeting(
+                                user1_id=pair[i],
+                                user2_id=pair[j],
+                                scheduled_time=datetime.utcnow(),
+                                status='scheduled',
+                                created_at=datetime.utcnow()
+                            )
+                            session.add(meeting)
 
             message += "\nПожалуйста, договоритесь о времени и формате встречи в личных сообщениях 😊"
 
@@ -1328,8 +1296,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_message.reply_text(error_message)
 
 
-async def update_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление города пользователя"""
+async def update_profile_field(update: Update, context: ContextTypes.DEFAULT_TYPE, field_name: str, field_display_name: str):
+    """Универсальная функция для обновления полей профиля"""
     session = next(get_session())
     try:
         user = session.query(User).filter(
@@ -1338,284 +1306,33 @@ async def update_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
             return ConversationHandler.END
 
-        user.city = update.message.text
+        # Обработка специальных случаев
+        if field_name == 'birth_date':
+            try:
+                value = datetime.strptime(update.message.text, "%d.%m.%Y")
+            except ValueError:
+                await update.message.reply_text("Пожалуйста, введите дату в правильном формате (ДД.ММ.ГГГГ):")
+                return SETTINGS_BIRTH_DATE
+        elif field_name == 'avatar':
+            if not update.message.photo:
+                await update.message.reply_text("Пожалуйста, отправьте фотографию:")
+                return SETTINGS_AVATAR
+            value = update.message.photo[-1].file_id
+        else:
+            value = update.message.text
+
+        # Обновляем значение поля
+        setattr(user, field_name, value)
         session.commit()
 
         keyboard = [[InlineKeyboardButton(
             "◀️ Назад", callback_data='settings')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Город успешно обновлен!", reply_markup=reply_markup)
+        await update.message.reply_text(f"{field_display_name} успешно обновлен!", reply_markup=reply_markup)
         return ConversationHandler.END
     except Exception as e:
-        logger.error(f"Error in update_city: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении города.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def update_social_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление ссылки на соц.сеть"""
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-        if not user:
-            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        user.social_link = update.message.text
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Ссылка на социальную сеть успешно обновлена!", reply_markup=reply_markup)
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_social_link: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении ссылки.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def update_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление информации о себе"""
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-        if not user:
-            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        user.about = update.message.text
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Информация о себе успешно обновлена!", reply_markup=reply_markup)
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_about: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении информации.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def update_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление места работы"""
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-        if not user:
-            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        user.job = update.message.text
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Место работы успешно обновлено!", reply_markup=reply_markup)
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_job: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении места работы.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def update_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление даты рождения"""
-    try:
-        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
-        session = next(get_session())
-        try:
-            user = session.query(User).filter(
-                User.telegram_id == update.effective_user.id).first()
-            if not user:
-                await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-                return ConversationHandler.END
-
-            user.birth_date = birth_date
-            session.commit()
-
-            keyboard = [[InlineKeyboardButton(
-                "◀️ Назад", callback_data='settings')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("Дата рождения успешно обновлена!", reply_markup=reply_markup)
-            return ConversationHandler.END
-        except Exception as e:
-            logger.error(f"Error in update_birth_date: {e}")
-            await update.message.reply_text("Произошла ошибка при обновлении даты рождения.")
-            return ConversationHandler.END
-        finally:
-            session.close()
-    except ValueError:
-        await update.message.reply_text("Пожалуйста, введите дату в правильном формате (ДД.ММ.ГГГГ):")
-        return SETTINGS_BIRTH_DATE
-
-
-async def update_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление аватара"""
-    if not update.message.photo:
-        await update.message.reply_text("Пожалуйста, отправьте фотографию:")
-        return SETTINGS_AVATAR
-
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-        if not user:
-            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        # Берем последнее (самое качественное) фото
-        photo = update.message.photo[-1]
-        user.avatar = photo.file_id
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Аватар успешно обновлен!", reply_markup=reply_markup)
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_avatar: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении аватара.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def update_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление хобби"""
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-        if not user:
-            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        user.hobbies = update.message.text
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Хобби успешно обновлены!", reply_markup=reply_markup)
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_hobbies: {e}")
-        await update.message.reply_text("Произошла ошибка при обновлении хобби.")
-        return ConversationHandler.END
-    finally:
-        session.close()
-
-
-async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка входа в меню настроек"""
-    query = update.callback_query
-    await query.answer()
-
-    session = next(get_session())
-    try:
-        # Проверяем, зарегистрирован ли пользователь
-        user = session.query(User).filter(
-            User.telegram_id == query.from_user.id).first()
-        if not user:
-            await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-            return ConversationHandler.END
-
-        keyboard = [
-            [
-                InlineKeyboardButton("🏙 Город", callback_data='settings_city'),
-                InlineKeyboardButton(
-                    "🔗 Соц.сеть", callback_data='settings_social_link')
-            ],
-            [
-                InlineKeyboardButton(
-                    "ℹ️ О себе", callback_data='settings_about'),
-                    InlineKeyboardButton(
-                        "💼 Работа", callback_data='settings_job')
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📅 Дата рождения", callback_data='settings_birth_date'),
-                        InlineKeyboardButton(
-                            "🖼 Аватар", callback_data='settings_avatar')
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🎯 Хобби", callback_data='settings_hobbies'),
-                            InlineKeyboardButton(
-                                "👁 Видимость", callback_data='settings_visibility')
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "◀️ Назад", callback_data='back_to_main')
-                        ]
-                    ]
-                ]
-                reply_markup= InlineKeyboardMarkup(keyboard)
-
-                settings_text= (
-                    "⚙️ Настройки профиля:\n\n"
-                    f"🏙 Город: {user.city or 'Не указан'}\n"
-                    f"🔗 Соц.сеть: {user.social_link or 'Не указана'}\n"
-                    f"ℹ️ О себе: {user.about or 'Не указано'}\n"
-                    f"💼 Работа: {user.job or 'Не указана'}\n"
-                    f"📅 Дата рождения: {user.birth_date.strftime('%d.%m.%Y') if user.birth_date else 'Не указана'}\n"
-                    f"🎯 Хобби: {user.hobbies or 'Не указаны'}\n"
-                    f"👁 Видимость: {'Публичный' if user.is_visible else 'Приватный'}"
-                )
-
-                await query.message.reply_text(settings_text, reply_markup=reply_markup)
-                return ConversationHandler.END
-            except Exception as e:
-                logger.error(f"Error in settings: {e}")
-                await query.message.reply_text("Произошла ошибка при открытии настроек.")
-                return ConversationHandler.END
-            finally:
-                session.close()
-
-
-async def update_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление видимости профиля"""
-    query = update.callback_query
-    await query.answer()
-    
-    session = next(get_session())
-    try:
-        user = session.query(User).filter(User.telegram_id == query.from_user.id).first()
-        if not user:
-            await query.message.reply_text("Произошла ошибка при получении данных пользователя.")
-            return ConversationHandler.END
-
-        visibility = query.data.split('_')[1]  # 'public' или 'private'
-        user.is_visible = (visibility == 'public')
-        session.commit()
-
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='settings')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        visibility_text = "Публичный" if user.is_visible else "Приватный"
-        await query.message.reply_text(
-            f"✅ Видимость профиля изменена на: {visibility_text}",
-            reply_markup=reply_markup
-        )
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in update_visibility: {e}")
-        await query.message.reply_text("Произошла ошибка при обновлении видимости профиля.")
+        logger.error(f"Error in update_{field_name}: {e}")
+        await update.message.reply_text(f"Произошла ошибка при обновлении {field_display_name}.")
         return ConversationHandler.END
     finally:
         session.close()
@@ -1623,17 +1340,18 @@ async def update_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Запуск бота"""
-    # Проверяем, не запущен ли уже экземпляр бота
-    if is_bot_running():
-        logger.error("Another instance of the bot is already running")
-        sys.exit(1)
-
-    # Регистрируем новый экземпляр
-    if not register_bot_instance():
-        logger.error("Failed to register bot instance")
-        sys.exit(1)
-
+    session = None
     try:
+        # Проверяем, не запущен ли уже экземпляр бота
+        if is_bot_running():
+            logger.error("Another instance of the bot is already running")
+            sys.exit(1)
+
+        # Регистрируем новый экземпляр
+        if not register_bot_instance():
+            logger.error("Failed to register bot instance")
+            sys.exit(1)
+
         # Создаем приложение
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -1662,45 +1380,64 @@ def main():
 
         # Создаем обработчик разговора для настроек
         settings_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(settings, pattern='^settings$')],
+            entry_points=[CallbackQueryHandler(
+                settings, pattern='^settings$')],
             states={
                 SETTINGS_CITY: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите ваш город:"), pattern='^settings_city$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_city)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Введите ваш город:"), pattern='^settings_city$'),
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'city', 'Город'))
                 ],
                 SETTINGS_SOCIAL_LINK: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите ссылку на вашу социальную сеть:"), pattern='^settings_social_link$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_social_link)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Введите ссылку на вашу социальную сеть:"), pattern='^settings_social_link$'),
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'social_link', 'Ссылка на социальную сеть'))
                 ],
                 SETTINGS_ABOUT: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Расскажите о себе:"), pattern='^settings_about$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_about)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Расскажите о себе:"), pattern='^settings_about$'),
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'about', 'Информация о себе'))
                 ],
                 SETTINGS_JOB: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Кем вы работаете?"), pattern='^settings_job$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_job)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Кем вы работаете?"), pattern='^settings_job$'),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: update_profile_field(
+                        u, c, 'job', 'Место работы'))
                 ],
                 SETTINGS_BIRTH_DATE: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Введите вашу дату рождения (в формате ДД.ММ.ГГГГ):"), pattern='^settings_birth_date$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_birth_date)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Введите вашу дату рождения (в формате ДД.ММ.ГГГГ):"), pattern='^settings_birth_date$'),
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'birth_date', 'Дата рождения'))
                 ],
                 SETTINGS_AVATAR: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Отправьте ваше фото для аватара:"), pattern='^settings_avatar$'),
-                    MessageHandler(filters.PHOTO, update_avatar)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Отправьте ваше фото для аватара:"), pattern='^settings_avatar$'),
+                    MessageHandler(filters.PHOTO, lambda u, c: update_profile_field(
+                        u, c, 'avatar', 'Аватар'))
                 ],
                 SETTINGS_HOBBIES: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Расскажите о ваших хобби:"), pattern='^settings_hobbies$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, update_hobbies)
+                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
+                        "Расскажите о ваших хобби:"), pattern='^settings_hobbies$'),
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'hobbies', 'Хобби'))
                 ],
                 SETTINGS_VISIBILITY: [
                     CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Выберите видимость профиля:", reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("Публичный", callback_data='visibility_public')],
-                        [InlineKeyboardButton("Приватный", callback_data='visibility_private')]
+                        [InlineKeyboardButton(
+                            "Публичный", callback_data='visibility_public')],
+                        [InlineKeyboardButton(
+                            "Приватный", callback_data='visibility_private')]
                     ])), pattern='^settings_visibility$'),
-                    CallbackQueryHandler(lambda u, c: update_visibility(u, c), pattern='^visibility_')
+                    CallbackQueryHandler(lambda u, c: update_visibility(
+                        u, c), pattern='^visibility_')
                 ]
             },
-            fallbacks=[CallbackQueryHandler(settings, pattern='^back_to_main$')],
+            fallbacks=[CallbackQueryHandler(
+                settings, pattern='^back_to_main$')],
             per_chat=True,
             per_user=True,
             per_message=True
