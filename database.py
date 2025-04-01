@@ -19,14 +19,15 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, nullable=False)
-    username = Column(String(255))
-    nickname = Column(String(255))
-    age = Column(Integer)
-    gender = Column(String(50))
-    profession = Column(String(255))
-    interests = Column(String(500))
-    language = Column(String(100))
-    meeting_time = Column(String(100))
+    username = Column(String)
+    nickname = Column(String)
+    city = Column(String)
+    social_link = Column(String)
+    about = Column(Text)
+    job = Column(String)
+    birth_date = Column(DateTime)
+    avatar = Column(String)  # Храним file_id от Telegram
+    hobbies = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String(8))
     is_active = Column(Boolean, default=True)
@@ -36,17 +37,17 @@ class User(Base):
     average_rating = Column(Float, default=0.0)
 
     # Связи с другими таблицами
-    preferences = relationship(
-        "UserPreferences", back_populates="user", uselist=False)
     meetings_as_user1 = relationship(
-        "Meeting", back_populates="user1", foreign_keys="Meeting.user1_id")
+        'Meeting', foreign_keys='Meeting.user1_id', back_populates='user1')
     meetings_as_user2 = relationship(
-        "Meeting", back_populates="user2", foreign_keys="Meeting.user2_id")
+        'Meeting', foreign_keys='Meeting.user2_id', back_populates='user2')
+    preferences = relationship(
+        'UserPreferences', back_populates='user', uselist=False)
     ratings_given = relationship(
-        "Rating", foreign_keys="Rating.from_user_id", back_populates="from_user")
+        'Rating', foreign_keys='Rating.from_user_id', back_populates='from_user')
     ratings_received = relationship(
-        "Rating", foreign_keys="Rating.to_user_id", back_populates="to_user")
-    poll_responses = relationship("PollResponse", back_populates="user")
+        'Rating', foreign_keys='Rating.to_user_id', back_populates='to_user')
+    poll_responses = relationship('PollResponse', back_populates='user')
 
 
 class UserPreferences(Base):

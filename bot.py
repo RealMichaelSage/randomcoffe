@@ -54,20 +54,14 @@ logger = logging.getLogger(__name__)
 # Состояния регистрации
 (
     ENTER_NAME,
-    ENTER_AGE,
-    ENTER_GENDER,
-    ENTER_PROFESSION,
-    ENTER_INTERESTS,
-    ENTER_LANGUAGE,
-    ENTER_MEETING_TIME,
-    # Состояния настроек
-    SETTINGS_GENDER,
-    SETTINGS_AGE_MIN,
-    SETTINGS_AGE_MAX,
-    SETTINGS_LANGUAGE,
-    SETTINGS_INTERESTS,
-    SETTINGS_TIME
-) = range(13)
+    ENTER_CITY,
+    ENTER_SOCIAL_LINK,
+    ENTER_ABOUT,
+    ENTER_JOB,
+    ENTER_BIRTH_DATE,
+    ENTER_AVATAR,
+    ENTER_HOBBIES
+) = range(8)
 
 # Словарь для хранения состояний пользователей
 user_states = {}
@@ -195,144 +189,111 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода имени"""
     context.user_data['name'] = update.message.text
+    await update.message.reply_text("Отлично! В каком городе вы живете?")
+    return ENTER_CITY
 
+
+async def enter_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ввода города"""
+    context.user_data['city'] = update.message.text
     await update.message.reply_text(
-        "Отлично! Теперь введите ваш возраст (число)"
+        "Укажите ссылку на вашу социальную сеть (например, VK, Instagram, LinkedIn):"
     )
-    return ENTER_AGE
+    return ENTER_SOCIAL_LINK
 
 
-async def enter_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ввода возраста"""
-    try:
-        age = int(update.message.text)
-        if age < 18 or age > 100:
-            await update.message.reply_text("Пожалуйста, введите корректный возраст (от 18 до 100)")
-            return ENTER_AGE
-
-        context.user_data['age'] = age
-
-        keyboard = [
-            [KeyboardButton("Мужской"), KeyboardButton("Женский")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-
-        await update.message.reply_text(
-            "Укажите ваш пол:",
-            reply_markup=reply_markup
-        )
-        return ENTER_GENDER
-    except ValueError:
-        await update.message.reply_text("Пожалуйста, введите число")
-        return ENTER_AGE
-
-
-async def enter_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ввода пола"""
-    gender = update.message.text
-    if gender not in ["Мужской", "Женский"]:
-        await update.message.reply_text("Пожалуйста, выберите пол, используя кнопки")
-        return ENTER_GENDER
-
-    context.user_data['gender'] = gender
-
+async def enter_social_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ввода ссылки на соц.сеть"""
+    context.user_data['social_link'] = update.message.text
     await update.message.reply_text(
-        "Укажите вашу профессию или род деятельности:"
+        "Расскажите немного о себе:"
     )
-    return ENTER_PROFESSION
+    return ENTER_ABOUT
 
 
-async def enter_profession(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def enter_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ввода информации о себе"""
+    context.user_data['about'] = update.message.text
+    await update.message.reply_text(
+        "Кем вы работаете?"
+    )
+    return ENTER_JOB
+
+
+async def enter_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода профессии"""
-    context.user_data['profession'] = update.message.text
-
+    context.user_data['job'] = update.message.text
     await update.message.reply_text(
-        "Расскажите о ваших интересах (например: программирование, спорт, музыка)"
+        "Укажите вашу дату рождения (в формате ДД.ММ.ГГГГ):"
     )
-    return ENTER_INTERESTS
+    return ENTER_BIRTH_DATE
 
 
-async def enter_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ввода интересов"""
-    context.user_data['interests'] = update.message.text
-
-    keyboard = [
-        [KeyboardButton("Русский"), KeyboardButton("English")],
-        [KeyboardButton("Русский + English")]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-
-    await update.message.reply_text(
-        "На каком языке вы предпочитаете общаться?",
-        reply_markup=reply_markup
-    )
-    return ENTER_LANGUAGE
-
-
-async def enter_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ввода языка"""
-    context.user_data['language'] = update.message.text
-
-    keyboard = [
-        [KeyboardButton("Утро"), KeyboardButton("День")],
-        [KeyboardButton("Вечер"), KeyboardButton("Любое время")]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-
-    await update.message.reply_text(
-        "В какое время вам удобно встречаться?",
-        reply_markup=reply_markup
-    )
-    return ENTER_MEETING_TIME
+async def enter_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ввода даты рождения"""
+    try:
+        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+        context.user_data['birth_date'] = birth_date
+        await update.message.reply_text(
+            "Отправьте ваше фото для аватара:"
+        )
+        return ENTER_AVATAR
+    except ValueError:
+        await update.message.reply_text(
+            "Пожалуйста, введите дату в правильном формате (ДД.ММ.ГГГГ):"
+        )
+        return ENTER_BIRTH_DATE
 
 
-async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def enter_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка загрузки аватара"""
+    if update.message.photo:
+        # Берем последнее (самое качественное) фото
+        photo = update.message.photo[-1]
+        context.user_data['avatar'] = photo.file_id
+        await update.message.reply_text(
+            "Отлично! Теперь расскажите о ваших хобби и интересах:"
+        )
+        return ENTER_HOBBIES
+    else:
+        await update.message.reply_text(
+            "Пожалуйста, отправьте фотографию:"
+        )
+        return ENTER_AVATAR
+
+
+async def enter_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Завершение регистрации"""
-    context.user_data['meeting_time'] = update.message.text
+    context.user_data['hobbies'] = update.message.text
     session = next(get_session())
 
     try:
-        # Проверяем, существует ли пользователь
-        existing_user = session.query(User).filter(
-            User.telegram_id == update.effective_user.id).first()
-
-        if existing_user:
-            # Обновляем существующего пользователя
-            existing_user.nickname = context.user_data['name']
-            existing_user.age = context.user_data['age']
-            existing_user.gender = context.user_data['gender']
-            existing_user.profession = context.user_data['profession']
-            existing_user.interests = context.user_data['interests']
-            existing_user.language = context.user_data['language']
-            existing_user.meeting_time = context.user_data['meeting_time']
-            existing_user.username = update.effective_user.username
-        else:
-            # Создаем нового пользователя
-            user = User(
-                telegram_id=update.effective_user.id,
-                username=update.effective_user.username,
-                nickname=context.user_data['name'],
-                age=context.user_data['age'],
-                gender=context.user_data['gender'],
-                profession=context.user_data['profession'],
-                interests=context.user_data['interests'],
-                language=context.user_data['language'],
-                meeting_time=context.user_data['meeting_time'],
-                created_at=datetime.utcnow()
-            )
-            session.add(user)
-
+        # Создаем нового пользователя
+        user = User(
+            telegram_id=update.effective_user.id,
+            username=update.effective_user.username,
+            nickname=context.user_data['name'],
+            city=context.user_data['city'],
+            social_link=context.user_data['social_link'],
+            about=context.user_data['about'],
+            job=context.user_data['job'],
+            birth_date=context.user_data['birth_date'],
+            avatar=context.user_data['avatar'],
+            hobbies=context.user_data['hobbies'],
+            created_at=datetime.utcnow()
+        )
+        session.add(user)
         session.commit()
 
         profile_text = (
             "✅ Регистрация завершена! Ваш профиль:\n\n"
             f"👤 Имя: {context.user_data['name']}\n"
-            f"📅 Возраст: {context.user_data['age']}\n"
-            f"⚧ Пол: {context.user_data['gender']}\n"
-            f"💼 Профессия: {context.user_data['profession']}\n"
-            f"🎯 Интересы: {context.user_data['interests']}\n"
-            f"🗣 Язык общения: {context.user_data['language']}\n"
-            f"🕒 Удобное время: {context.user_data['meeting_time']}"
+            f"🏙 Город: {context.user_data['city']}\n"
+            f"🔗 Соц.сеть: {context.user_data['social_link']}\n"
+            f"ℹ️ О себе: {context.user_data['about']}\n"
+            f"💼 Работа: {context.user_data['job']}\n"
+            f"📅 Дата рождения: {context.user_data['birth_date'].strftime('%d.%m.%Y')}\n"
+            f"🎯 Хобби: {context.user_data['hobbies']}"
         )
 
         keyboard = [
@@ -347,10 +308,19 @@ async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(profile_text, reply_markup=reply_markup)
+        # Отправляем аватар с профилем
+        if context.user_data.get('avatar'):
+            await update.message.reply_photo(
+                photo=context.user_data['avatar'],
+                caption=profile_text,
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(profile_text, reply_markup=reply_markup)
+
         return ConversationHandler.END
     except Exception as e:
-        logger.error(f"Error in enter_meeting_time: {e}")
+        logger.error(f"Error in enter_hobbies: {e}")
         await update.message.reply_text("Произошла ошибка при сохранении профиля.")
         return ConversationHandler.END
     finally:
@@ -1364,12 +1334,13 @@ def main():
                 register, pattern='^register$')],
             states={
                 ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
-                ENTER_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_age)],
-                ENTER_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_gender)],
-                ENTER_PROFESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_profession)],
-                ENTER_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_interests)],
-                ENTER_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_language)],
-                ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
+                ENTER_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_city)],
+                ENTER_SOCIAL_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_social_link)],
+                ENTER_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_about)],
+                ENTER_JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_job)],
+                ENTER_BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_birth_date)],
+                ENTER_AVATAR: [MessageHandler(filters.PHOTO, enter_avatar)],
+                ENTER_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_hobbies)],
             },
             fallbacks=[CommandHandler('cancel', start)],
             per_chat=True,
