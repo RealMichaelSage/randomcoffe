@@ -49,8 +49,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Добавляем комментарий для перезапуска бота
-# Bot restart comment - 2024-04-01
+# Bot restart - 2024-04-01 - Fix database initialization and user handling
 
 # Состояния регистрации
 (
@@ -599,11 +598,13 @@ async def distribute_pairs(context: ContextTypes.DEFAULT_TYPE):
                 # Получаем информацию о пользователях
                 users = []
                 for user_id in pair:
-                    user = session.query(User).filter_by(
-                        telegram_id=user_id).first()
+                    user = session.query(User).filter_by(id=user_id).first()
                     if user:
-                        users.append(
-                            f"@{user.username}" if user.username else f"[Пользователь](tg://user?id={user_id})")
+                        if user.username:
+                            users.append(f"@{user.username}")
+                        else:
+                            users.append(
+                                f"[Пользователь](tg://user?id={user.telegram_id})")
 
                 # Добавляем пару в сообщение
                 message += "👥 " + " и ".join(users) + "\n"
@@ -659,6 +660,8 @@ async def distribute_pairs(context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"Error creating pairs for chat: {e}")
+    finally:
+        session.close()
 
 
 async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):

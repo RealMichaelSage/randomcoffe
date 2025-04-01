@@ -160,8 +160,16 @@ class BotInstance(Base):
 
 def init_db():
     """Инициализация базы данных"""
-    engine = create_engine('sqlite:///random_coffee.db')
+    database_url = os.getenv('DATABASE_URL', 'sqlite:///random_coffee.db')
+    engine = create_engine(database_url)
+
+    # Удаляем все существующие таблицы
+    Base.metadata.drop_all(engine)
+
+    # Создаем все таблицы заново
     Base.metadata.create_all(engine)
+
+    return engine
 
 
 # Создаем глобальную сессию базы данных
