@@ -712,20 +712,23 @@ def main():
 
     # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("stats", stats))
+
+    # Добавляем обработчик разговора
     application.add_handler(conv_handler)
-    application.add_handler(settings_handler)  # Добавляем обработчик настроек
-    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(settings_handler)
 
-    # Добавляем планировщик задач
+    # Настраиваем отправку еженедельных опросов
     job_queue = application.job_queue
+    if job_queue:
+        # Отправляем опрос каждый понедельник в 10:00
+        job_queue.run_repeating(send_weekly_poll, interval=timedelta(days=7),
+                                first=get_next_monday(), context=None)
 
-    # Создаем опрос каждую пятницу в 18:00
-    job_queue.run_repeating(create_weekly_poll, interval=timedelta(
-        days=7), first=datetime.now().replace(hour=18, minute=0))
-
-    # Распределяем пары каждый понедельник в 10:00
-    job_queue.run_repeating(distribute_pairs, interval=timedelta(
-        days=7), first=datetime.now().replace(hour=10, minute=0))
+        # Отправляем результаты и создаем пары каждый понедельник в 17:00
+        job_queue.run_repeating(create_pairs, interval=timedelta(days=7),
+                                first=get_next_monday(hour=17), context=None)
 
     # Запускаем бота
     print("Бот запускается...")
