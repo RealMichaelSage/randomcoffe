@@ -47,6 +47,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Добавляем комментарий для перезапуска бота
+# Bot restart comment - 2024-04-01
+
 # Состояния регистрации
 (
     ENTER_NAME,
@@ -91,6 +94,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.add(db_chat)
             session.commit()
 
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "👤 Регистрация", callback_data='register'),
+                    InlineKeyboardButton(
+                        "⚙️ Настройки", callback_data='settings')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 Статистика", callback_data='stats'),
+                    InlineKeyboardButton("❓ FAQ", callback_data='faq')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
             await update.message.reply_text(
                 "Привет! Я бот для случайных кофе-встреч. "
                 "Я помогу организовать неформальные встречи между участниками чата. "
@@ -99,11 +117,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Основные команды:\n"
                 "/help - показать справку\n"
                 "/stats - показать статистику\n"
-                "/settings - настроить предпочтения"
+                "/settings - настроить предпочтения",
+                reply_markup=reply_markup
             )
         else:
+            keyboard = [
+                [
+                    InlineKeyboardButton("👤 Профиль", callback_data='profile'),
+                    InlineKeyboardButton(
+                        "⚙️ Настройки", callback_data='settings')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 Статистика", callback_data='stats'),
+                    InlineKeyboardButton("❓ FAQ", callback_data='faq')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
             await update.message.reply_text(
-                "Я уже работаю в этом чате! Используйте /help для просмотра доступных команд."
+                "Я уже работаю в этом чате! Используйте кнопки ниже для навигации:",
+                reply_markup=reply_markup
             )
     except Exception as e:
         logger.error(f"Error in start command: {e}")
@@ -1308,6 +1342,7 @@ def main():
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("stats", stats))
+        application.add_handler(CallbackQueryHandler(button_handler))
 
         # Добавляем обработчик разговора
         application.add_handler(conv_handler)

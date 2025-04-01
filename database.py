@@ -18,13 +18,15 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True)
-    nickname = Column(String(100))
+    telegram_id = Column(BigInteger, unique=True, nullable=False)
+    username = Column(String(255))
+    nickname = Column(String(255))
     age = Column(Integer)
-    gender = Column(String(10))
-    interests = Column(String)
-    language = Column(String(50))
-    meeting_time = Column(String(50))
+    gender = Column(String(50))
+    profession = Column(String(255))
+    interests = Column(String(500))
+    language = Column(String(100))
+    meeting_time = Column(String(100))
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String(8))
     is_active = Column(Boolean, default=True)
@@ -34,11 +36,12 @@ class User(Base):
     average_rating = Column(Float, default=0.0)
 
     # Связи с другими таблицами
-    preferences = relationship("UserPreferences", back_populates="user")
+    preferences = relationship(
+        "UserPreferences", back_populates="user", uselist=False)
     meetings_as_user1 = relationship(
-        "Meeting", foreign_keys="Meeting.user1_id", back_populates="user1")
+        "Meeting", back_populates="user1", foreign_keys="Meeting.user1_id")
     meetings_as_user2 = relationship(
-        "Meeting", foreign_keys="Meeting.user2_id", back_populates="user2")
+        "Meeting", back_populates="user2", foreign_keys="Meeting.user2_id")
     ratings_given = relationship(
         "Rating", foreign_keys="Rating.from_user_id", back_populates="from_user")
     ratings_received = relationship(
@@ -50,12 +53,12 @@ class UserPreferences(Base):
     __tablename__ = 'user_preferences'
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
-    preferred_gender = Column(String(10))
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    preferred_gender = Column(String(50))
     age_range_min = Column(Integer)
     age_range_max = Column(Integer)
-    preferred_languages = Column(String(100))
-    preferred_interests = Column(String)
+    preferred_languages = Column(String(255))
+    preferred_interests = Column(String(500))
     preferred_meeting_times = Column(String(100))
     only_new_users = Column(Boolean, default=False)
     only_experienced = Column(Boolean, default=False)
@@ -68,10 +71,10 @@ class Meeting(Base):
     __tablename__ = 'meetings'
 
     id = Column(Integer, primary_key=True)
-    user1_id = Column(Integer, ForeignKey('users.id'))
-    user2_id = Column(Integer, ForeignKey('users.id'))
+    user1_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user2_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     scheduled_time = Column(DateTime)
-    status = Column(String(20))  # 'pending', 'completed', 'cancelled'
+    status = Column(String(50))  # scheduled, completed, cancelled
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи с пользователями
@@ -86,19 +89,19 @@ class Rating(Base):
     __tablename__ = 'ratings'
 
     id = Column(Integer, primary_key=True)
-    meeting_id = Column(Integer, ForeignKey('meetings.id'))
-    from_user_id = Column(Integer, ForeignKey('users.id'))
-    to_user_id = Column(Integer, ForeignKey('users.id'))
-    rating = Column(Integer)  # 1-5
-    comment = Column(String)
+    meeting_id = Column(Integer, ForeignKey('meetings.id'), nullable=False)
+    rater_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    rated_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    rating = Column(Float)
+    comment = Column(String(500))
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи с пользователями
     meeting = relationship("Meeting", back_populates="ratings")
     from_user = relationship("User", foreign_keys=[
-                             from_user_id], back_populates="ratings_given")
+                             rater_user_id], back_populates="ratings_given")
     to_user = relationship("User", foreign_keys=[
-                           to_user_id], back_populates="ratings_received")
+                           rated_user_id], back_populates="ratings_received")
 
 
 class Chat(Base):
@@ -106,13 +109,13 @@ class Chat(Base):
     __tablename__ = 'chats'
 
     id = Column(Integer, primary_key=True)
-    chat_id = Column(BigInteger, unique=True)
-    title = Column(String(100))
+    chat_id = Column(BigInteger, unique=True, nullable=False)
+    title = Column(String(255))
     is_active = Column(Boolean, default=True)
     joined_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи с другими таблицами
-    weekly_polls = relationship("WeeklyPoll", back_populates="chat")
+    polls = relationship("WeeklyPoll", back_populates="chat")
 
 
 class WeeklyPoll(Base):
@@ -120,15 +123,15 @@ class WeeklyPoll(Base):
     __tablename__ = 'weekly_polls'
 
     id = Column(Integer, primary_key=True)
-    chat_id = Column(Integer, ForeignKey('chats.id'))
+    chat_id = Column(Integer, ForeignKey('chats.id'), nullable=False)
+    message_id = Column(Integer)
     week_start = Column(DateTime)
     week_end = Column(DateTime)
-    status = Column(String(20))
-    message_id = Column(Integer)
+    status = Column(String(50))  # active, closed
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи с другими таблицами
-    chat = relationship("Chat", back_populates="weekly_polls")
+    chat = relationship("Chat", back_populates="polls")
     responses = relationship("PollResponse", back_populates="poll")
 
 
@@ -136,8 +139,8 @@ class PollResponse(Base):
     __tablename__ = 'poll_responses'
 
     id = Column(Integer, primary_key=True)
-    poll_id = Column(Integer, ForeignKey('weekly_polls.id'))
-    user_id = Column(Integer, ForeignKey('users.id'))
+    poll_id = Column(Integer, ForeignKey('weekly_polls.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     response = Column(Boolean)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -156,19 +159,8 @@ class BotInstance(Base):
 
 def init_db():
     """Инициализация базы данных"""
-    database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        raise ValueError("DATABASE_URL not found in environment variables")
-
-    # Создаем движок базы данных
-    engine = create_engine(database_url)
-
-    # Создаем все таблицы
+    engine = create_engine('sqlite:///random_coffee.db')
     Base.metadata.create_all(engine)
-
-    # Создаем сессию
-    Session = sessionmaker(bind=engine)
-    return Session()
 
 
 # Создаем глобальную сессию базы данных
