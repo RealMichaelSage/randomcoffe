@@ -1330,6 +1330,15 @@ def update_heartbeat():
         session.close()
 
 
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик ошибок для приложения Telegram"""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
+    if update and update.effective_message:
+        error_message = "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже."
+        await update.effective_message.reply_text(error_message)
+
+
 def main():
     """Запуск бота"""
     # Проверяем, не запущен ли уже экземпляр бота
@@ -1345,6 +1354,9 @@ def main():
     try:
         # Создаем приложение
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        # Добавляем обработчик ошибок
+        application.add_error_handler(error_handler)
 
         # Создаем обработчик разговора для регистрации
         conv_handler = ConversationHandler(
