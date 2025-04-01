@@ -1229,9 +1229,9 @@ def main():
 
     # Добавляем обработчики для отслеживания изменений в чате
     application.add_handler(MessageHandler(
-        filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
+        filters.ALL, handle_new_chat_member))
     application.add_handler(MessageHandler(
-        filters.StatusUpdate.LEFT_CHAT_MEMBERS, handle_left_chat_member))
+        filters.ALL, handle_left_chat_member))
 
     # Добавляем обработчик ответов на опросы
     application.add_handler(PollAnswerHandler(handle_poll_answer))
