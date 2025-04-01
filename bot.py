@@ -7,8 +7,20 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, B
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from database import init_db, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse
 
-# Загрузка переменных окружения
+# Загружаем переменные окружения из файла .env, если он существует
 load_dotenv()
+
+# Получаем переменные окружения
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
+
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
+if not GROUP_CHAT_ID:
+    raise ValueError("GROUP_CHAT_ID not found in environment variables")
+
+# Конвертируем GROUP_CHAT_ID в int
+GROUP_CHAT_ID = int(GROUP_CHAT_ID)
 
 # Настройка логирования
 logging.basicConfig(
@@ -399,7 +411,7 @@ async def create_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
 
     # Отправляем опрос в чат
     message = await context.bot.send_poll(
-        chat_id=os.getenv('GROUP_CHAT_ID'),
+        chat_id=GROUP_CHAT_ID,
         question="Привет, будешь участвовать во встречах Random Coffee на следующей неделе? ☕️",
         options=["Да", "Нет"],
         is_anonymous=False
@@ -448,7 +460,7 @@ async def distribute_pairs(context: ContextTypes.DEFAULT_TYPE):
     pairs_text += "\n➪ Напиши собеседнику в личку, чтобы договориться об удобном времени и формате встречи ☕️"
 
     await context.bot.send_message(
-        chat_id=os.getenv('GROUP_CHAT_ID'),
+        chat_id=GROUP_CHAT_ID,
         text=pairs_text
     )
 
@@ -666,14 +678,8 @@ async def save_time_preference(update: Update, context: ContextTypes.DEFAULT_TYP
 
 def main():
     """Запуск бота"""
-    # Получаем токен бота
-    token = os.getenv('TELEGRAM_BOT_TOKEN')
-    if not token:
-        print("Ошибка: Не найден токен бота в файле .env")
-        return
-
     # Создаем приложение
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Создаем обработчик разговора для регистрации
     conv_handler = ConversationHandler(
