@@ -204,210 +204,210 @@ async def enter_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def enter_meeting_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Завершение регистрации"""
     context.user_data['meeting_time'] = update.message.text
+    session = Session()
 
-    # Сохраняем данные в базу
-    user = User(
-        telegram_id=update.effective_user.id,
-        nickname=context.user_data['name'],
-        age=context.user_data['age'],
-        gender=context.user_data['gender'],
-        profession=context.user_data['profession'],
-        interests=context.user_data['interests'],
-        language=context.user_data['language'],
-        meeting_time=context.user_data['meeting_time'],
-        created_at=datetime.now()
-    )
+    try:
+        # Проверяем, существует ли пользователь
+        existing_user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
 
-    # Проверяем, существует ли пользователь
-    existing_user = db.query(User).filter(
-        User.telegram_id == update.effective_user.id).first()
-    if existing_user:
-        # Обновляем существующего пользователя
-        existing_user.nickname = user.nickname
-        existing_user.age = user.age
-        existing_user.gender = user.gender
-        existing_user.profession = user.profession
-        existing_user.interests = user.interests
-        existing_user.language = user.language
-        existing_user.meeting_time = user.meeting_time
-    else:
-        # Добавляем нового пользователя
-        db.add(user)
+        if existing_user:
+            # Обновляем существующего пользователя
+            existing_user.nickname = context.user_data['name']
+            existing_user.age = context.user_data['age']
+            existing_user.gender = context.user_data['gender']
+            existing_user.profession = context.user_data['profession']
+            existing_user.interests = context.user_data['interests']
+            existing_user.language = context.user_data['language']
+            existing_user.meeting_time = context.user_data['meeting_time']
+        else:
+            # Создаем нового пользователя
+            user = User(
+                telegram_id=update.effective_user.id,
+                nickname=context.user_data['name'],
+                age=context.user_data['age'],
+                gender=context.user_data['gender'],
+                profession=context.user_data['profession'],
+                interests=context.user_data['interests'],
+                language=context.user_data['language'],
+                meeting_time=context.user_data['meeting_time'],
+                created_at=datetime.utcnow()
+            )
+            session.add(user)
 
-    db.commit()
+        session.commit()
 
-    profile_text = (
-        "✅ Регистрация завершена! Ваш профиль:\n\n"
-        f"👤 Имя: {context.user_data['name']}\n"
-        f"📅 Возраст: {context.user_data['age']}\n"
-        f"⚧ Пол: {context.user_data['gender']}\n"
-        f"💼 Профессия: {context.user_data['profession']}\n"
-        f"🎯 Интересы: {context.user_data['interests']}\n"
-        f"🗣 Язык общения: {context.user_data['language']}\n"
-        f"🕒 Удобное время: {context.user_data['meeting_time']}"
-    )
+        profile_text = (
+            "✅ Регистрация завершена! Ваш профиль:\n\n"
+            f"👤 Имя: {context.user_data['name']}\n"
+            f"📅 Возраст: {context.user_data['age']}\n"
+            f"⚧ Пол: {context.user_data['gender']}\n"
+            f"💼 Профессия: {context.user_data['profession']}\n"
+            f"🎯 Интересы: {context.user_data['interests']}\n"
+            f"🗣 Язык общения: {context.user_data['language']}\n"
+            f"🕒 Удобное время: {context.user_data['meeting_time']}"
+        )
 
-    keyboard = [
-        [
-            InlineKeyboardButton("👤 Профиль", callback_data='profile'),
-            InlineKeyboardButton("⚙️ Настройки", callback_data='settings')
-        ],
-        [
-            InlineKeyboardButton("📊 Статистика", callback_data='stats'),
-            InlineKeyboardButton("❓ FAQ", callback_data='faq')
+        keyboard = [
+            [
+                InlineKeyboardButton("👤 Профиль", callback_data='profile'),
+                InlineKeyboardButton("⚙️ Настройки", callback_data='settings')
+            ],
+            [
+                InlineKeyboardButton("📊 Статистика", callback_data='stats'),
+                InlineKeyboardButton("❓ FAQ", callback_data='faq')
+            ]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(profile_text, reply_markup=reply_markup)
-    return ConversationHandler.END
+        await update.message.reply_text(profile_text, reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in enter_meeting_time: {e}")
+        await update.message.reply_text("Произошла ошибка при сохранении профиля.")
+        return ConversationHandler.END
+    finally:
+        session.close()
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
     query = update.callback_query
     await query.answer()
+    session = Session()
 
-    if query.data == 'register':
-        await register(update, context)
-    elif query.data == 'profile':
-        # Получаем профиль из базы данных
-        user = db.query(User).filter(
-            User.telegram_id == query.from_user.id).first()
-        if user:
-            profile_text = (
-                "👤 Ваш профиль:\n\n"
-                f"👤 Имя: {user.nickname}\n"
-                f"📅 Возраст: {user.age}\n"
-                f"⚧ Пол: {user.gender}\n"
-                f"💼 Профессия: {user.profession}\n"
-                f"🎯 Интересы: {user.interests}\n"
-                f"🗣 Язык общения: {user.language}\n"
-                f"🕒 Удобное время: {user.meeting_time}\n"
-                f"📆 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
-            )
-        else:
-            profile_text = "👤 Ваш профиль:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
+    try:
+        if query.data == 'register':
+            await register(update, context)
+        elif query.data == 'profile':
+            # Получаем профиль из базы данных
+            user = session.query(User).filter(
+                User.telegram_id == query.from_user.id).first()
+            if user:
+                profile_text = (
+                    "👤 Ваш профиль:\n\n"
+                    f"👤 Имя: {user.nickname}\n"
+                    f"📅 Возраст: {user.age}\n"
+                    f"⚧ Пол: {user.gender}\n"
+                    f"💼 Профессия: {user.profession}\n"
+                    f"🎯 Интересы: {user.interests}\n"
+                    f"🗣 Язык общения: {user.language}\n"
+                    f"🕒 Удобное время: {user.meeting_time}\n"
+                    f"📆 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
+                )
+            else:
+                profile_text = "👤 Ваш профиль:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
 
-        await query.message.reply_text(profile_text)
-    elif query.data == 'settings':
-        # Получаем настройки пользователя
-        user = db.query(User).filter(
-            User.telegram_id == query.from_user.id).first()
-        if not user:
-            await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
-            return
+            await query.message.reply_text(profile_text)
+        elif query.data == 'settings':
+            # Получаем настройки пользователя
+            user = session.query(User).filter(
+                User.telegram_id == query.from_user.id).first()
+            if not user:
+                await query.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
+                return
 
-        preferences = db.query(UserPreferences).filter(
-            UserPreferences.user_id == user.id).first()
+            preferences = session.query(UserPreferences).filter(
+                UserPreferences.user_id == user.id).first()
 
-        keyboard = [
-            [
-                InlineKeyboardButton("👥 Предпочитаемый пол",
-                                     callback_data='set_gender'),
-                InlineKeyboardButton(
-                    "📅 Возрастной диапазон", callback_data='set_age')
-            ],
-            [
-                InlineKeyboardButton(
-                    "🗣 Язык общения", callback_data='set_language'),
-                InlineKeyboardButton(
-                    "🎯 Интересы", callback_data='set_interests')
-            ],
-            [
-                InlineKeyboardButton(
-                    "🕒 Удобное время", callback_data='set_time'),
-                InlineKeyboardButton("🔄 Сбросить настройки",
-                                     callback_data='reset_settings')
+            keyboard = [
+                [
+                    InlineKeyboardButton("👥 Предпочитаемый пол",
+                                         callback_data='set_gender'),
+                    InlineKeyboardButton(
+                        "📅 Возрастной диапазон", callback_data='set_age')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🗣 Язык общения", callback_data='set_language'),
+                    InlineKeyboardButton(
+                        "🎯 Интересы", callback_data='set_interests')
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🕒 Удобное время", callback_data='set_time'),
+                    InlineKeyboardButton("🔄 Сбросить настройки",
+                                         callback_data='reset_settings')
+                ]
             ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-        settings_text = "⚙️ Настройки подбора собеседников:\n\n"
-        if preferences:
-            settings_text += (
-                f"👥 Предпочитаемый пол: {preferences.preferred_gender or 'Любой'}\n"
-                f"📅 Возраст: {preferences.age_range_min or '18'}-{preferences.age_range_max or '100'} лет\n"
-                f"🗣 Язык общения: {preferences.preferred_languages or 'Любой'}\n"
-                f"🎯 Интересы: {preferences.preferred_interests or 'Любые'}\n"
-                f"🕒 Удобное время: {preferences.preferred_meeting_times or 'Любое'}\n"
-            )
-        else:
-            settings_text += "Настройки пока не заданы. Используйте кнопки ниже для настройки предпочтений."
+            settings_text = "⚙️ Настройки подбора собеседников:\n\n"
+            if preferences:
+                settings_text += (
+                    f"👥 Предпочитаемый пол: {preferences.preferred_gender or 'Любой'}\n"
+                    f"📅 Возраст: {preferences.age_range_min or '18'}-{preferences.age_range_max or '100'} лет\n"
+                    f"🗣 Язык общения: {preferences.preferred_languages or 'Любой'}\n"
+                    f"🎯 Интересы: {preferences.preferred_interests or 'Любые'}\n"
+                    f"🕒 Удобное время: {preferences.preferred_meeting_times or 'Любое'}\n"
+                )
+            else:
+                settings_text += "Настройки пока не заданы. Используйте кнопки ниже для настройки предпочтений."
 
-        await query.message.reply_text(settings_text, reply_markup=reply_markup)
-    elif query.data.startswith('set_'):
-        # получаем тип настройки (gender, age, language и т.д.)
-        setting_type = query.data[4:]
-        await handle_settings(update, context, setting_type)
-    elif query.data == 'reset_settings':
-        await reset_settings(update, context)
-    elif query.data == 'stats':
-        # Получаем статистику пользователя
-        user = db.query(User).filter(
-            User.telegram_id == query.from_user.id).first()
-        if user:
-            # Получаем все встречи пользователя
-            total_meetings = len(user.meetings_as_user1) + \
-                len(user.meetings_as_user2)
-            completed_meetings = db.query(Meeting).filter(
-                ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
-                (Meeting.status == 'completed')
-            ).count()
+            await query.message.reply_text(settings_text, reply_markup=reply_markup)
+        elif query.data.startswith('set_'):
+            # получаем тип настройки (gender, age, language и т.д.)
+            setting_type = query.data[4:]
+            await handle_settings(update, context, setting_type)
+        elif query.data == 'reset_settings':
+            await reset_settings(update, context)
+        elif query.data == 'stats':
+            # Получаем статистику пользователя
+            user = session.query(User).filter(
+                User.telegram_id == query.from_user.id).first()
+            if user:
+                # Получаем все встречи пользователя
+                total_meetings = len(user.meetings_as_user1) + \
+                    len(user.meetings_as_user2)
+                completed_meetings = session.query(Meeting).filter(
+                    ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
+                    (Meeting.status == 'completed')
+                ).count()
 
-            # Получаем средний рейтинг
-            ratings = db.query(Rating).filter(
-                Rating.rated_user_id == user.id).all()
-            avg_rating = sum([r.rating for r in ratings]) / \
-                len(ratings) if ratings else 0
+                # Получаем средний рейтинг
+                ratings = session.query(Rating).filter(
+                    Rating.rated_user_id == user.id).all()
+                avg_rating = sum([r.rating for r in ratings]) / \
+                    len(ratings) if ratings else 0
 
-            # Определяем уровень опыта
-            experience_level = "🌱 Новичок"
-            if total_meetings >= 10:
-                experience_level = "🌿 Регуляр"
-            if total_meetings >= 20:
-                experience_level = "🌳 Эксперт"
+                # Определяем уровень опыта
+                experience_level = "🌱 Новичок"
+                if total_meetings >= 10:
+                    experience_level = "🌿 Регуляр"
+                if total_meetings >= 20:
+                    experience_level = "🌳 Эксперт"
 
-            stats_text = (
-                "📊 Ваша статистика:\n\n"
-                f"👥 Всего встреч: {total_meetings}\n"
-                f"✅ Завершённых встреч: {completed_meetings}\n"
-                f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
-                f"📈 Уровень опыта: {experience_level}\n"
-                f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
-                "🏆 Достижения:\n"
-            )
+                stats_text = (
+                    "📊 Ваша статистика:\n\n"
+                    f"👥 Всего встреч: {total_meetings}\n"
+                    f"✅ Завершённых встреч: {completed_meetings}\n"
+                    f"⭐️ Средняя оценка: {avg_rating:.1f}\n"
+                    f"📈 Уровень опыта: {experience_level}\n"
+                    f"📅 В клубе с: {user.created_at.strftime('%d.%m.%Y')}\n\n"
+                    "🏆 Достижения:\n"
+                )
 
-            # Добавляем достижения
-            if total_meetings >= 1:
-                stats_text += "🎯 Первая встреча\n"
-            if total_meetings >= 5:
-                stats_text += "🔥 5 встреч\n"
-            if total_meetings >= 10:
-                stats_text += "💫 10 встреч\n"
-            if total_meetings >= 20:
-                stats_text += "🌟 20 встреч\n"
-            if avg_rating >= 4.5:
-                stats_text += "⭐️ Отличный собеседник\n"
+                # Добавляем достижения
+                if total_meetings >= 1:
+                    stats_text += "🎯 Первая встреча\n"
+                if total_meetings >= 5:
+                    stats_text += "🔥 5 встреч\n"
+                if total_meetings >= 10:
+                    stats_text += "💫 10 встреч\n"
+                if total_meetings >= 20:
+                    stats_text += "🌟 20 встреч\n"
+                if avg_rating >= 4.5:
+                    stats_text += "⭐️ Отличный собеседник\n"
 
-        else:
-            stats_text = "📊 Статистика:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
+            else:
+                stats_text = "📊 Статистика:\n\nПрофиль не найден. Пожалуйста, зарегистрируйтесь."
 
-        await query.message.reply_text(stats_text)
-    elif query.data == 'faq':
-        await query.message.reply_text(
-            "❓ Часто задаваемые вопросы:\n\n"
-            "1. Как это работает?\n"
-            "   - Каждую пятницу бот создает опрос участия\n"
-            "   - В понедельник формируются случайные пары\n"
-            "   - Участники договариваются о встрече\n\n"
-            "2. Как зарегистрироваться?\n"
-            "   - Нажмите кнопку 'Регистрация'\n"
-            "   - Заполните анкету\n\n"
-            "3. Как отменить встречу?\n"
-            "   - Сообщите об этом в чате с партнером\n"
-            "   - Дождитесь следующего распределения"
-        )
+            await query.message.reply_text(stats_text)
+    except Exception as e:
+        logger.error(f"Error in button_handler: {e}")
+        await query.message.reply_text("Произошла ошибка при обработке запроса.")
+    finally:
+        session.close()
 
 
 async def create_weekly_poll(context: ContextTypes.DEFAULT_TYPE):
@@ -664,14 +664,14 @@ async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сброс настроек пользователя"""
     query = update.callback_query
-    user = db.query(User).filter(
+    user = Session().query(User).filter(
         User.telegram_id == query.from_user.id).first()
     if user:
-        preferences = db.query(UserPreferences).filter(
+        preferences = Session().query(UserPreferences).filter(
             UserPreferences.user_id == user.id).first()
         if preferences:
-            db.delete(preferences)
-            db.commit()
+            Session().delete(preferences)
+            Session().commit()
             await query.message.reply_text("✅ Настройки успешно сброшены!")
         else:
             await query.message.reply_text("ℹ️ У вас пока нет сохраненных настроек.")
@@ -681,20 +681,20 @@ async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_gender_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого пола"""
-    user = db.query(User).filter(User.telegram_id ==
-                                 update.effective_user.id).first()
+    user = Session().query(User).filter(User.telegram_id ==
+                                        update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = db.query(UserPreferences).filter(
+    preferences = Session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        db.add(preferences)
+        Session().add(preferences)
 
     preferences.preferred_gender = update.message.text
-    db.commit()
+    Session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемый пол собеседника установлен: {update.message.text}")
     return ConversationHandler.END
@@ -726,21 +726,21 @@ async def save_age_max_preference(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text(f"Пожалуйста, введите корректный возраст (от {min_age} до 100)")
             return SETTINGS_AGE_MAX
 
-        user = db.query(User).filter(User.telegram_id ==
-                                     update.effective_user.id).first()
+        user = Session().query(User).filter(User.telegram_id ==
+                                            update.effective_user.id).first()
         if not user:
             await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
             return ConversationHandler.END
 
-        preferences = db.query(UserPreferences).filter(
+        preferences = Session().query(UserPreferences).filter(
             UserPreferences.user_id == user.id).first()
         if not preferences:
             preferences = UserPreferences(user_id=user.id)
-            db.add(preferences)
+            Session().add(preferences)
 
         preferences.age_range_min = min_age
         preferences.age_range_max = age
-        db.commit()
+        Session().commit()
 
         await update.message.reply_text(
             f"✅ Возрастной диапазон собеседников установлен: {min_age}-{age} лет"
@@ -753,20 +753,20 @@ async def save_age_max_preference(update: Update, context: ContextTypes.DEFAULT_
 
 async def save_language_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого языка"""
-    user = db.query(User).filter(User.telegram_id ==
-                                 update.effective_user.id).first()
+    user = Session().query(User).filter(User.telegram_id ==
+                                        update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = db.query(UserPreferences).filter(
+    preferences = Session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        db.add(preferences)
+        Session().add(preferences)
 
     preferences.preferred_languages = update.message.text
-    db.commit()
+    Session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемый язык общения установлен: {update.message.text}")
     return ConversationHandler.END
@@ -774,20 +774,20 @@ async def save_language_preference(update: Update, context: ContextTypes.DEFAULT
 
 async def save_interests_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемых интересов"""
-    user = db.query(User).filter(User.telegram_id ==
-                                 update.effective_user.id).first()
+    user = Session().query(User).filter(User.telegram_id ==
+                                        update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = db.query(UserPreferences).filter(
+    preferences = Session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        db.add(preferences)
+        Session().add(preferences)
 
     preferences.preferred_interests = update.message.text
-    db.commit()
+    Session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемые интересы установлены: {update.message.text}")
     return ConversationHandler.END
@@ -795,20 +795,20 @@ async def save_interests_preference(update: Update, context: ContextTypes.DEFAUL
 
 async def save_time_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение предпочитаемого времени"""
-    user = db.query(User).filter(User.telegram_id ==
-                                 update.effective_user.id).first()
+    user = Session().query(User).filter(User.telegram_id ==
+                                        update.effective_user.id).first()
     if not user:
         await update.message.reply_text("⚠️ Сначала нужно зарегистрироваться!")
         return ConversationHandler.END
 
-    preferences = db.query(UserPreferences).filter(
+    preferences = Session().query(UserPreferences).filter(
         UserPreferences.user_id == user.id).first()
     if not preferences:
         preferences = UserPreferences(user_id=user.id)
-        db.add(preferences)
+        Session().add(preferences)
 
     preferences.preferred_meeting_times = update.message.text
-    db.commit()
+    Session().commit()
 
     await update.message.reply_text(f"✅ Предпочитаемое время встреч установлено: {update.message.text}")
     return ConversationHandler.END
@@ -837,19 +837,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет статистику пользователя"""
-    user = db.query(User).filter(User.telegram_id ==
-                                 update.effective_user.id).first()
+    user = Session().query(User).filter(User.telegram_id ==
+                                        update.effective_user.id).first()
     if user:
         # Получаем все встречи пользователя
         total_meetings = len(user.meetings_as_user1) + \
             len(user.meetings_as_user2)
-        completed_meetings = db.query(Meeting).filter(
+        completed_meetings = Session().query(Meeting).filter(
             ((Meeting.user1_id == user.id) | (Meeting.user2_id == user.id)) &
             (Meeting.status == 'completed')
         ).count()
 
         # Получаем средний рейтинг
-        ratings = db.query(Rating).filter(
+        ratings = Session().query(Rating).filter(
             Rating.rated_user_id == user.id).all()
         avg_rating = sum([r.rating for r in ratings]) / \
             len(ratings) if ratings else 0
@@ -896,7 +896,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     poll_id = answer.poll_id
 
     # Получаем последний опрос из базы данных
-    poll = db.query(WeeklyPoll).filter(
+    poll = Session().query(WeeklyPoll).filter(
         WeeklyPoll.message_id == poll_id).first()
     if not poll:
         return
@@ -918,7 +918,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     # Проверяем, существует ли уже ответ от этого пользователя
-    existing_response = db.query(PollResponse).filter(
+    existing_response = Session().query(PollResponse).filter(
         PollResponse.poll_id == poll.id,
         PollResponse.user_id == user_id
     ).first()
@@ -929,9 +929,9 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         existing_response.created_at = datetime.now()
     else:
         # Добавляем новый ответ
-        db.add(poll_response)
+        Session().add(poll_response)
 
-    db.commit()
+    Session().commit()
 
     # Если это первичный опрос и пользователь ответил "Да",
     # предлагаем ему зарегистрироваться
@@ -1196,7 +1196,7 @@ def main():
             ENTER_MEETING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_meeting_time)],
         },
         fallbacks=[CommandHandler('cancel', start)],
-        per_message=True
+        per_chat=True
     )
 
     # Создаем обработчик разговора для настроек
@@ -1211,7 +1211,7 @@ def main():
             SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
         },
         fallbacks=[CommandHandler('cancel', start)],
-        per_message=True
+        per_chat=True
     )
 
     # Добавляем обработчики
@@ -1224,10 +1224,8 @@ def main():
     application.add_handler(settings_handler)
 
     # Добавляем обработчики для отслеживания изменений в чате
-    application.add_handler(MessageHandler(
-        filters.ChatMemberUpdated.MY_CHAT_MEMBER, handle_new_chat_member))
-    application.add_handler(MessageHandler(
-        filters.ChatMemberUpdated.MY_CHAT_MEMBER, handle_left_chat_member))
+    application.add_handler(ChatMemberHandler(handle_new_chat_member))
+    application.add_handler(ChatMemberHandler(handle_left_chat_member))
 
     # Добавляем обработчик ответов на опросы
     application.add_handler(PollAnswerHandler(handle_poll_answer))
