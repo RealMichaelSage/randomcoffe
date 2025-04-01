@@ -1232,17 +1232,27 @@ def is_bot_running():
         running_instances = session.query(BotInstance).count()
 
         if running_instances > 0:
-            # Проверяем, не устарели ли записи (старше 5 минут)
-            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
-            session.query(BotInstance).filter(
+            # Проверяем, не устарели ли записи (старше 2 минут)
+            cutoff_time = datetime.utcnow() - timedelta(minutes=2)
+            stale_instances = session.query(BotInstance).filter(
                 BotInstance.last_heartbeat < cutoff_time
-            ).delete()
+            ).all()
+
+            # Удаляем устаревшие записи
+            for instance in stale_instances:
+                session.delete(instance)
             session.commit()
 
             # Проверяем оставшиеся записи
             running_instances = session.query(BotInstance).count()
-            return running_instances > 0
+            if running_instances > 0:
+                logger.warning(
+                    f"Found {running_instances} running bot instances")
+                return True
         return False
+    except Exception as e:
+        logger.error(f"Error checking bot instances: {e}")
+        return True  # В случае ошибки предполагаем худшее
     finally:
         session.close()
 
@@ -1258,6 +1268,7 @@ def register_bot_instance():
         )
         session.add(instance)
         session.commit()
+        logger.info(f"Registered new bot instance: {instance.instance_id}")
         return True
     except Exception as e:
         logger.error(f"Error registering bot instance: {e}")
@@ -1276,6 +1287,8 @@ def update_heartbeat():
         if latest_instance:
             latest_instance.last_heartbeat = datetime.utcnow()
             session.commit()
+    except Exception as e:
+        logger.error(f"Error updating heartbeat: {e}")
     finally:
         session.close()
 
@@ -1368,9 +1381,21 @@ def main():
                 first=get_next_monday(hour=17)
             )
 
+            # Добавляем периодическое обновление heartbeat
+            application.job_queue.run_repeating(
+                update_heartbeat,
+                interval=timedelta(minutes=1)
+            )
+
         # Запускаем бота
-        print("Бот запускается...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        logger.info("Bot is starting...")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True  # Игнорируем старые обновления
+        )
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        raise
     finally:
         # Удаляем запись о текущем экземпляре
         session = next(get_session())
@@ -1381,6 +1406,9 @@ def main():
             if latest_instance:
                 session.delete(latest_instance)
                 session.commit()
+                logger.info("Bot instance record removed")
+        except Exception as e:
+            logger.error(f"Error removing bot instance: {e}")
         finally:
             session.close()
 
