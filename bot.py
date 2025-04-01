@@ -60,8 +60,17 @@ logger = logging.getLogger(__name__)
     ENTER_JOB,
     ENTER_BIRTH_DATE,
     ENTER_AVATAR,
-    ENTER_HOBBIES
-) = range(8)
+    ENTER_HOBBIES,
+    # Состояния настроек
+    SETTINGS_CITY,
+    SETTINGS_SOCIAL_LINK,
+    SETTINGS_ABOUT,
+    SETTINGS_JOB,
+    SETTINGS_BIRTH_DATE,
+    SETTINGS_AVATAR,
+    SETTINGS_HOBBIES,
+    SETTINGS_VISIBILITY
+) = range(16)
 
 # Словарь для хранения состояний пользователей
 user_states = {}
@@ -1309,6 +1318,199 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_message.reply_text(error_message)
 
 
+async def update_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление города пользователя"""
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        user.city = update.message.text
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Город успешно обновлен!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_city: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении города.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
+async def update_social_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление ссылки на соц.сеть"""
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        user.social_link = update.message.text
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Ссылка на социальную сеть успешно обновлена!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_social_link: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении ссылки.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
+async def update_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление информации о себе"""
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        user.about = update.message.text
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Информация о себе успешно обновлена!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_about: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении информации.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
+async def update_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление места работы"""
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        user.job = update.message.text
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Место работы успешно обновлено!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_job: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении места работы.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
+async def update_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление даты рождения"""
+    try:
+        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+        session = next(get_session())
+        try:
+            user = session.query(User).filter(
+                User.telegram_id == update.effective_user.id).first()
+            if not user:
+                await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+                return ConversationHandler.END
+
+            user.birth_date = birth_date
+            session.commit()
+
+            keyboard = [[InlineKeyboardButton(
+                "◀️ Назад", callback_data='settings')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Дата рождения успешно обновлена!", reply_markup=reply_markup)
+            return ConversationHandler.END
+        except Exception as e:
+            logger.error(f"Error in update_birth_date: {e}")
+            await update.message.reply_text("Произошла ошибка при обновлении даты рождения.")
+            return ConversationHandler.END
+        finally:
+            session.close()
+    except ValueError:
+        await update.message.reply_text("Пожалуйста, введите дату в правильном формате (ДД.ММ.ГГГГ):")
+        return SETTINGS_BIRTH_DATE
+
+
+async def update_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление аватара"""
+    if not update.message.photo:
+        await update.message.reply_text("Пожалуйста, отправьте фотографию:")
+        return SETTINGS_AVATAR
+
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        # Берем последнее (самое качественное) фото
+        photo = update.message.photo[-1]
+        user.avatar = photo.file_id
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Аватар успешно обновлен!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_avatar: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении аватара.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
+async def update_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление хобби"""
+    session = next(get_session())
+    try:
+        user = session.query(User).filter(
+            User.telegram_id == update.effective_user.id).first()
+        if not user:
+            await update.message.reply_text("Произошла ошибка при получении данных пользователя.")
+            return ConversationHandler.END
+
+        user.hobbies = update.message.text
+        session.commit()
+
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад", callback_data='settings')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Хобби успешно обновлены!", reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in update_hobbies: {e}")
+        await update.message.reply_text("Произошла ошибка при обновлении хобби.")
+        return ConversationHandler.END
+    finally:
+        session.close()
+
+
 def main():
     """Запуск бота"""
     # Проверяем, не запущен ли уже экземпляр бота
@@ -1351,14 +1553,15 @@ def main():
         # Создаем обработчик разговора для настроек
         settings_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(
-                handle_settings, pattern='^set_')],
+                settings, pattern='^settings$')],
             states={
-                SETTINGS_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_gender_preference)],
-                SETTINGS_AGE_MIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_min_preference)],
-                SETTINGS_AGE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_age_max_preference)],
-                SETTINGS_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_language_preference)],
-                SETTINGS_INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_interests_preference)],
-                SETTINGS_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_time_preference)],
+                SETTINGS_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_city)],
+                SETTINGS_SOCIAL_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_social_link)],
+                SETTINGS_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_about)],
+                SETTINGS_JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_job)],
+                SETTINGS_BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_birth_date)],
+                SETTINGS_AVATAR: [MessageHandler(filters.PHOTO, update_avatar)],
+                SETTINGS_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_hobbies)],
             },
             fallbacks=[CommandHandler('cancel', start)],
             per_chat=True,
