@@ -15,12 +15,27 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
 
-GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_ID')
+# Пытаемся получить GROUP_CHAT_ID из разных возможных переменных окружения
+GROUP_CHAT_ID = os.getenv('TELEGRAM_GROUP_ID') or os.getenv(
+    'GROUP_CHAT_ID') or os.getenv('CHAT_ID')
 if not GROUP_CHAT_ID:
-    raise ValueError("TELEGRAM_GROUP_ID not found in environment variables")
+    print("Warning: GROUP_CHAT_ID not found in environment variables. Using default value.")
+    GROUP_CHAT_ID = "439634804"  # Значение по умолчанию
 
 # Конвертируем GROUP_CHAT_ID в int
 GROUP_CHAT_ID = int(GROUP_CHAT_ID)
+
+# Настройка базы данных
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    print("Warning: DATABASE_URL not found in environment variables. Using default SQLite database.")
+    DATABASE_URL = "sqlite:///random_coffee.db"
+
+# Настройка поддержки
+SUPPORT_CHAT_ID = os.getenv('SUPPORT_CHAT_ID') or GROUP_CHAT_ID
+
+# Инициализация базы данных
+init_db(DATABASE_URL)
 
 # Настройка логирования
 logging.basicConfig(
