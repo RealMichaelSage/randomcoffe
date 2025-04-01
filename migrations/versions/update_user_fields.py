@@ -35,6 +35,21 @@ def upgrade():
         'birth_date', sa.DateTime(), nullable=True))
     op.add_column('users', sa.Column('avatar', sa.String(), nullable=True))
     op.add_column('users', sa.Column('hobbies', sa.Text(), nullable=True))
+    op.add_column('users', sa.Column('status', sa.String(50),
+                  nullable=False, server_default='active'))
+    op.add_column('users', sa.Column('is_active', sa.Boolean(),
+                  nullable=False, server_default='true'))
+    op.add_column('users', sa.Column('show_profile', sa.Boolean(),
+                  nullable=False, server_default='true'))
+    op.add_column('users', sa.Column('experience_level',
+                  sa.Integer(), nullable=False, server_default='0'))
+    op.add_column('users', sa.Column('total_meetings',
+                  sa.Integer(), nullable=False, server_default='0'))
+    op.add_column('users', sa.Column('average_rating',
+                  sa.Float(), nullable=False, server_default='0.0'))
+    op.add_column('users', sa.Column('last_active', sa.DateTime(),
+                  nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')))
+    op.add_column('users', sa.Column('settings', sa.Text(), nullable=True))
 
 
 def downgrade():
@@ -46,6 +61,14 @@ def downgrade():
     op.drop_column('users', 'birth_date')
     op.drop_column('users', 'avatar')
     op.drop_column('users', 'hobbies')
+    op.drop_column('users', 'status')
+    op.drop_column('users', 'is_active')
+    op.drop_column('users', 'show_profile')
+    op.drop_column('users', 'experience_level')
+    op.drop_column('users', 'total_meetings')
+    op.drop_column('users', 'average_rating')
+    op.drop_column('users', 'last_active')
+    op.drop_column('users', 'settings')
 
     # Возвращаем старые колонки
     op.add_column('users', sa.Column('age', sa.Integer(), nullable=True))

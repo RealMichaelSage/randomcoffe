@@ -29,12 +29,14 @@ class User(Base):
     avatar = Column(String)  # Храним file_id от Telegram
     hobbies = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-    status = Column(String(8))
+    status = Column(String(50), default='active')  # active, inactive, blocked
     is_active = Column(Boolean, default=True)
     show_profile = Column(Boolean, default=True)
     experience_level = Column(Integer, default=0)
     total_meetings = Column(Integer, default=0)
     average_rating = Column(Float, default=0.0)
+    last_active = Column(DateTime, default=datetime.utcnow)
+    settings = Column(Text)  # JSON строка для дополнительных настроек
 
     # Связи с другими таблицами
     meetings_as_user1 = relationship(
