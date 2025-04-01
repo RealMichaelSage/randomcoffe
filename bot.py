@@ -1174,14 +1174,44 @@ def main():
             entry_points=[CallbackQueryHandler(
                 register, pattern='^register$')],
             states={
-                ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
-                ENTER_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_city)],
-                ENTER_SOCIAL_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_social_link)],
-                ENTER_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_about)],
-                ENTER_JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_job)],
-                ENTER_BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_birth_date)],
-                ENTER_AVATAR: [MessageHandler(filters.PHOTO, enter_avatar)],
-                ENTER_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_hobbies)],
+                ENTER_NAME: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_name),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_CITY: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_city),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_SOCIAL_LINK: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_social_link),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_ABOUT: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_about),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_JOB: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, enter_job),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_BIRTH_DATE: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_birth_date),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_AVATAR: [
+                    MessageHandler(filters.PHOTO, enter_avatar),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
+                ENTER_HOBBIES: [
+                    MessageHandler(filters.TEXT & ~
+                                   filters.COMMAND, enter_hobbies),
+                    CallbackQueryHandler(register, pattern='^register$')
+                ],
             },
             fallbacks=[CommandHandler('cancel', start)],
             per_chat=True,
