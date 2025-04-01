@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, Bot, ReplyKeyboardMarkup, KeyboardButton, ChatMemberUpdated, Chat
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler, ChatMemberHandler, PollAnswerHandler
-from database import init_db, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
+from database import Base, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat
 
 # Загружаем переменные окружения из файла .env, если он существует
 load_dotenv(override=True)
