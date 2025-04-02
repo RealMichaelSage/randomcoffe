@@ -197,52 +197,109 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода имени"""
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text("Отлично! В каком городе вы живете?")
-    return ENTER_CITY
+    try:
+        # Сохраняем имя в контексте пользователя
+        context.user_data['name'] = update.message.text
+
+        # Отправляем сообщение с запросом города
+        await update.message.reply_text(
+            "Отлично! В каком городе вы живете?"
+        )
+        return ENTER_CITY
+    except Exception as e:
+        logger.error(f"Error in enter_name: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке имени. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_NAME
 
 
 async def enter_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода города"""
-    context.user_data['city'] = update.message.text
-    await update.message.reply_text(
-        "Укажите ссылку на вашу социальную сеть (например, VK, Instagram, LinkedIn):"
-    )
-    return ENTER_SOCIAL_LINK
+    try:
+        # Сохраняем город в контексте пользователя
+        context.user_data['city'] = update.message.text
+
+        # Отправляем сообщение с запросом социальной сети
+        await update.message.reply_text(
+            "Укажите ссылку на вашу социальную сеть (например, VK, Instagram, LinkedIn):"
+        )
+        return ENTER_SOCIAL_LINK
+    except Exception as e:
+        logger.error(f"Error in enter_city: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке города. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_CITY
 
 
 async def enter_social_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода ссылки на соц.сеть"""
-    context.user_data['social_link'] = update.message.text
-    await update.message.reply_text(
-        "Расскажите немного о себе:"
-    )
-    return ENTER_ABOUT
+    try:
+        # Сохраняем ссылку в контексте пользователя
+        context.user_data['social_link'] = update.message.text
+
+        # Отправляем сообщение с запросом информации о себе
+        await update.message.reply_text(
+            "Расскажите немного о себе:"
+        )
+        return ENTER_ABOUT
+    except Exception as e:
+        logger.error(f"Error in enter_social_link: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке ссылки. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_SOCIAL_LINK
 
 
 async def enter_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода информации о себе"""
-    context.user_data['about'] = update.message.text
-    await update.message.reply_text(
-        "Кем вы работаете?"
-    )
-    return ENTER_JOB
+    try:
+        # Сохраняем информацию о себе в контексте пользователя
+        context.user_data['about'] = update.message.text
+
+        # Отправляем сообщение с запросом места работы
+        await update.message.reply_text(
+            "Кем вы работаете?"
+        )
+        return ENTER_JOB
+    except Exception as e:
+        logger.error(f"Error in enter_about: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке информации. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_ABOUT
 
 
 async def enter_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода профессии"""
-    context.user_data['job'] = update.message.text
-    await update.message.reply_text(
-        "Укажите вашу дату рождения (в формате ДД.ММ.ГГГГ):"
-    )
-    return ENTER_BIRTH_DATE
+    try:
+        # Сохраняем профессию в контексте пользователя
+        context.user_data['job'] = update.message.text
+
+        # Отправляем сообщение с запросом даты рождения
+        await update.message.reply_text(
+            "Укажите вашу дату рождения (в формате ДД.ММ.ГГГГ):"
+        )
+        return ENTER_BIRTH_DATE
+    except Exception as e:
+        logger.error(f"Error in enter_job: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке профессии. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_JOB
 
 
 async def enter_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ввода даты рождения"""
     try:
+        # Парсим дату рождения
         birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+
+        # Сохраняем дату рождения в контексте пользователя
         context.user_data['birth_date'] = birth_date
+
+        # Отправляем сообщение с запросом аватара
         await update.message.reply_text(
             "Отправьте ваше фото для аватара:"
         )
@@ -252,31 +309,48 @@ async def enter_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пожалуйста, введите дату в правильном формате (ДД.ММ.ГГГГ):"
         )
         return ENTER_BIRTH_DATE
+    except Exception as e:
+        logger.error(f"Error in enter_birth_date: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке даты рождения. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_BIRTH_DATE
 
 
 async def enter_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка загрузки аватара"""
-    if update.message.photo:
-        # Берем последнее (самое качественное) фото
-        photo = update.message.photo[-1]
-        context.user_data['avatar'] = photo.file_id
+    try:
+        if update.message.photo:
+            # Берем последнее (самое качественное) фото
+            photo = update.message.photo[-1]
+
+            # Сохраняем ID фото в контексте пользователя
+            context.user_data['avatar'] = photo.file_id
+
+            # Отправляем сообщение с запросом хобби
+            await update.message.reply_text(
+                "Отлично! Теперь расскажите о ваших хобби и интересах:"
+            )
+            return ENTER_HOBBIES
+        else:
+            await update.message.reply_text(
+                "Пожалуйста, отправьте фотографию:"
+            )
+            return ENTER_AVATAR
+    except Exception as e:
+        logger.error(f"Error in enter_avatar: {e}")
         await update.message.reply_text(
-            "Отлично! Теперь расскажите о ваших хобби и интересах:"
-        )
-        return ENTER_HOBBIES
-    else:
-        await update.message.reply_text(
-            "Пожалуйста, отправьте фотографию:"
+            "Произошла ошибка при обработке фото. Пожалуйста, попробуйте еще раз."
         )
         return ENTER_AVATAR
 
 
 async def enter_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Завершение регистрации"""
-    context.user_data['hobbies'] = update.message.text
-    session = next(get_session())
-
     try:
+        # Сохраняем хобби в контексте пользователя
+        context.user_data['hobbies'] = update.message.text
+
         # Создаем нового пользователя
         user = User(
             telegram_id=update.effective_user.id,
@@ -291,9 +365,16 @@ async def enter_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hobbies=context.user_data['hobbies'],
             created_at=datetime.utcnow()
         )
-        session.add(user)
-        session.commit()
 
+        # Сохраняем пользователя в базу данных
+        session = next(get_session())
+        try:
+            session.add(user)
+            session.commit()
+        finally:
+            session.close()
+
+        # Формируем текст профиля
         profile_text = (
             "✅ Регистрация завершена! Ваш профиль:\n\n"
             f"👤 Имя: {context.user_data['name']}\n"
@@ -305,6 +386,7 @@ async def enter_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎯 Хобби: {context.user_data['hobbies']}"
         )
 
+        # Создаем клавиатуру
         keyboard = [
             [
                 InlineKeyboardButton("👤 Профиль", callback_data='profile'),
@@ -330,10 +412,10 @@ async def enter_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"Error in enter_hobbies: {e}")
-        await update.message.reply_text("Произошла ошибка при сохранении профиля.")
-        return ConversationHandler.END
-    finally:
-        session.close()
+        await update.message.reply_text(
+            "Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте еще раз."
+        )
+        return ENTER_HOBBIES
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -668,23 +750,44 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     answer = update.poll_answer
     session = next(get_session())
     try:
+        logger.info(
+            f"Received poll answer from user {answer.user.id} for poll {answer.poll_id}")
+
         # Получаем пользователя и опрос
         user = session.query(User).filter(
             User.telegram_id == answer.user.id).first()
         poll = session.query(WeeklyPoll).filter(
             WeeklyPoll.message_id == answer.poll_id).first()
 
-        if not user or not poll:
-            logger.warning(
-                f"User or poll not found: user_id={answer.user.id}, poll_id={answer.poll_id}")
+        if not poll:
+            logger.warning(f"Poll not found: poll_id={answer.poll_id}")
             return
 
         # Получаем выбранный вариант ответа
         selected_option = answer.option_ids[0] if answer.option_ids else None
         if selected_option is None:
+            logger.warning(
+                f"No option selected in poll: poll_id={answer.poll_id}")
             return
 
-        response_text = ["Да", "Нет"][selected_option]
+        # Определяем ответ (Да/Нет)
+        response = (selected_option == 0)  # True для "Да", False для "Нет"
+        logger.info(
+            f"User {answer.user.id} answered {'Yes' if response else 'No'}")
+
+        # Если пользователь не найден, создаем запись о его ответе
+        if not user:
+            logger.info(
+                f"Creating new user record for user_id={answer.user.id}")
+            user = User(
+                telegram_id=answer.user.id,
+                username=answer.user.username,
+                created_at=datetime.utcnow()
+            )
+            session.add(user)
+            session.commit()
+            logger.info(
+                f"Created new user record for user_id={answer.user.id}")
 
         # Обновляем или создаем ответ
         existing_response = session.query(PollResponse).filter(
@@ -693,30 +796,44 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ).first()
 
         if existing_response:
-            existing_response.response = response_text
+            existing_response.response = response
             existing_response.created_at = datetime.utcnow()
+            logger.info(
+                f"Updated existing response for user {user.id} and poll {poll.id}")
         else:
-            session.add(PollResponse(
+            new_response = PollResponse(
                 poll_id=poll.id,
                 user_id=user.id,
-                response=response_text,
+                response=response,
                 created_at=datetime.utcnow()
-            ))
+            )
+            session.add(new_response)
+            logger.info(
+                f"Created new response for user {user.id} and poll {poll.id}")
 
         session.commit()
 
-        # Если это первичный опрос и пользователь ответил "Да", предлагаем регистрацию
-        if poll.status == 'initial' and response_text == "Да":
+        # Если пользователь ответил "Да" и не зарегистрирован, предлагаем регистрацию
+        if response and not user.nickname:
+            logger.info(
+                f"User {user.id} answered Yes but is not registered. Sending registration offer.")
             keyboard = [[InlineKeyboardButton(
                 "👤 Регистрация", callback_data='register')]]
-            await context.bot.send_message(
-                chat_id=user.telegram_id,
-                text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
-                     "Нажмите кнопку ниже, чтобы начать регистрацию:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            try:
+                await context.bot.send_message(
+                    chat_id=answer.user.id,
+                    text="Отлично! Для участия в Random Coffee нужно зарегистрироваться. "
+                         "Нажмите кнопку ниже, чтобы начать регистрацию:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                logger.info(
+                    f"Successfully sent registration offer to user {answer.user.id}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to send registration offer to user {answer.user.id}: {e}")
+
     except Exception as e:
-        logger.error(f"Error in handle_poll_answer: {e}")
+        logger.error(f"Error in handle_poll_answer: {e}", exc_info=True)
     finally:
         session.close()
 
@@ -1005,7 +1122,7 @@ def register_bot_instance():
         session.close()
 
 
-def update_heartbeat():
+async def update_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """Обновляет время последнего heartbeat для текущего экземпляра"""
     session = next(get_session())
     try:
@@ -1015,6 +1132,8 @@ def update_heartbeat():
         if latest_instance:
             latest_instance.last_heartbeat = datetime.utcnow()
             session.commit()
+            logger.debug(
+                f"Heartbeat updated for instance {latest_instance.instance_id}")
     except Exception as e:
         logger.error(f"Error updating heartbeat: {e}")
     finally:
@@ -1027,7 +1146,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if update and update.effective_message:
         error_message = "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже."
-        await update.effective_message.reply_text(error_message)
+        try:
+            await update.effective_message.reply_text(error_message)
+        except Exception as e:
+            logger.error(f"Error sending error message: {e}", exc_info=True)
 
 
 async def update_profile_field(update: Update, context: ContextTypes.DEFAULT_TYPE, field_name: str, field_display_name: str):
