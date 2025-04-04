@@ -11,6 +11,8 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from database import Base, User, UserPreferences, Meeting, Rating, WeeklyPoll, PollResponse, Chat, BotInstance
 import uuid
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import asyncio
 
 # Загружаем переменные окружения из файла .env, если он существует
 load_dotenv(override=True)
@@ -1285,27 +1287,34 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 
-def main():
-    """Запуск бота"""
+async def main():
+    """Основная функция запуска бота"""
     session = None
     try:
-        # Проверяем, не запущен ли уже экземпляр бота
+        # Проверяем, не запущен ли уже бот
         if is_bot_running():
             logger.error("Another instance of the bot is already running")
-            sys.exit(1)
+            return
 
-        # Регистрируем новый экземпляр
-        if not register_bot_instance():
+        # Регистрируем новый экземпляр бота
+        instance_id = register_bot_instance()
+        if not instance_id:
             logger.error("Failed to register bot instance")
-            sys.exit(1)
+            return
 
         # Создаем приложение
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-        # Добавляем обработчик ошибок
-        application.add_error_handler(error_handler)
+        # Добавляем обработчики команд
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("profile", profile))
+        application.add_handler(CommandHandler("settings", settings))
+        application.add_handler(CommandHandler("stats", stats))
+        application.add_handler(CommandHandler("faq", faq))
+        application.add_handler(CommandHandler("cancel", start))
 
-        # Создаем обработчик разговора для регистрации
+        # Добавляем обработчик разговора для регистрации
         conv_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 register, pattern='^register$')],
@@ -1355,147 +1364,67 @@ def main():
             per_message=True
         )
 
-        # Создаем обработчик разговора для настроек
+        # Добавляем обработчик разговора для настроек
         settings_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 settings, pattern='^settings$')],
             states={
-                SETTINGS_CITY: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Введите ваш город:"), pattern='^settings_city$'),
-                    MessageHandler(filters.TEXT & ~
-                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'city', 'Город'))
-                ],
-                SETTINGS_SOCIAL_LINK: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Введите ссылку на вашу социальную сеть:"), pattern='^settings_social_link$'),
-                    MessageHandler(filters.TEXT & ~
-                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'social_link', 'Ссылка на социальную сеть'))
-                ],
-                SETTINGS_ABOUT: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Расскажите о себе:"), pattern='^settings_about$'),
-                    MessageHandler(filters.TEXT & ~
-                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'about', 'Информация о себе'))
-                ],
-                SETTINGS_JOB: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Кем вы работаете?"), pattern='^settings_job$'),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: update_profile_field(
-                        u, c, 'job', 'Место работы'))
-                ],
-                SETTINGS_BIRTH_DATE: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Введите вашу дату рождения (в формате ДД.ММ.ГГГГ):"), pattern='^settings_birth_date$'),
-                    MessageHandler(filters.TEXT & ~
-                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'birth_date', 'Дата рождения'))
-                ],
-                SETTINGS_AVATAR: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Отправьте ваше фото для аватара:"), pattern='^settings_avatar$'),
-                    MessageHandler(filters.PHOTO, lambda u, c: update_profile_field(
-                        u, c, 'avatar', 'Аватар'))
-                ],
-                SETTINGS_HOBBIES: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text(
-                        "Расскажите о ваших хобби:"), pattern='^settings_hobbies$'),
-                    MessageHandler(filters.TEXT & ~
-                                   filters.COMMAND, lambda u, c: update_profile_field(u, c, 'hobbies', 'Хобби'))
-                ],
-                SETTINGS_VISIBILITY: [
-                    CallbackQueryHandler(lambda u, c: u.callback_query.message.reply_text("Выберите видимость профиля:", reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "Публичный", callback_data='visibility_public')],
-                        [InlineKeyboardButton(
-                            "Приватный", callback_data='visibility_private')]
-                    ])), pattern='^settings_visibility$'),
-                    CallbackQueryHandler(lambda u, c: update_visibility(
-                        u, c), pattern='^visibility_')
-                ]
+                SETTINGS_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_city)],
+                SETTINGS_SOCIAL_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_social_link)],
+                SETTINGS_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_about)],
+                SETTINGS_JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_job)],
+                SETTINGS_BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_birth_date)],
+                SETTINGS_AVATAR: [MessageHandler(filters.PHOTO, update_avatar)],
+                SETTINGS_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_hobbies)],
+                SETTINGS_VISIBILITY: [CallbackQueryHandler(
+                    update_visibility, pattern='^visibility_')]
             },
-            fallbacks=[CallbackQueryHandler(
-                settings, pattern='^back_to_main$')],
+            fallbacks=[CommandHandler('cancel', start)],
             per_chat=True,
             per_user=True,
             per_message=True
         )
 
-        # Добавляем обработчики
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("stats", stats))
-        application.add_handler(CallbackQueryHandler(button_handler))
-
-        # Добавляем обработчик разговора
         application.add_handler(conv_handler)
         application.add_handler(settings_handler)
 
-        # Добавляем обработчики для отслеживания изменений в чате
-        application.add_handler(MessageHandler(
-            filters.ALL, handle_new_chat_member))
-        application.add_handler(MessageHandler(
-            filters.ALL, handle_left_chat_member))
-
-        # Добавляем обработчик ответов на опросы
+        # Добавляем обработчики для кнопок и опросов
+        application.add_handler(CallbackQueryHandler(button))
         application.add_handler(PollAnswerHandler(handle_poll_answer))
 
-        # Настраиваем отправку еженедельных опросов
-        if application.job_queue:
-            # Отправляем опрос каждый понедельник в 10:00
-            application.job_queue.run_repeating(
-                send_weekly_poll,
-                interval=timedelta(days=7),
-                first=get_next_monday()
-            )
+        # Настраиваем планировщик задач
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(send_weekly_poll, 'cron', day_of_week='mon',
+                          hour=10, minute=0, timezone='Europe/Moscow')
+        scheduler.add_job(distribute_pairs, 'cron', day_of_week='tue',
+                          hour=10, minute=0, timezone='Europe/Moscow')
+        scheduler.add_job(update_heartbeat, 'interval', minutes=1)
+        scheduler.start()
 
-            # Отправляем результаты и создаем пары каждый понедельник в 17:00
-            application.job_queue.run_repeating(
-                distribute_pairs,
-                interval=timedelta(days=7),
-                first=get_next_monday(hour=17)
-            )
-
-            # Добавляем периодическое обновление heartbeat
-            application.job_queue.run_repeating(
-                update_heartbeat,
-                interval=timedelta(minutes=1)
-            )
-
-        # Запускаем бота
         logger.info("Bot is starting...")
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,  # Игнорируем старые обновления
-            read_timeout=30,  # Увеличиваем таймаут чтения
-            write_timeout=30,  # Увеличиваем таймаут записи
-            connect_timeout=30,  # Увеличиваем таймаут подключения
-            pool_timeout=30  # Увеличиваем таймаут пула
-        )
+        await application.run_polling()
+
     except Exception as e:
         logger.error(f"Error in main: {e}")
-        raise
-    finally:
-        # Удаляем запись о текущем экземпляре
-        session = next(get_session())
-        try:
-            latest_instance = session.query(BotInstance).order_by(
-                BotInstance.last_heartbeat.desc()
-            ).first()
-            if latest_instance:
-                session.delete(latest_instance)
+        if session:
+            try:
+                # Удаляем запись о текущем экземпляре бота
+                session.query(BotInstance).filter(
+                    BotInstance.instance_id == instance_id).delete()
                 session.commit()
                 logger.info("Bot instance record removed")
-        except Exception as e:
-            logger.error(f"Error removing bot instance: {e}")
-        finally:
+            except Exception as e:
+                logger.error(f"Error removing bot instance: {e}")
+    finally:
+        if session:
             session.close()
 
 
 if __name__ == '__main__':
     try:
-        main()
-    except KeyboardInterrupt:
-        print("\nБот остановлен пользователем")
+        # Запускаем бота
+        asyncio.run(main())
     except Exception as e:
         print(f"Ошибка при запуске бота: {e}")
         logger.error(f"Error: {e}")
+        sys.exit(1)
